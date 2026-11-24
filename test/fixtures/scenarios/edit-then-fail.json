@@ -1,0 +1,44 @@
+{
+  "description": "Edits the deck, then fails. Used for revert and failure paths.",
+  "edit": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "read"
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true
+    },
+    {
+      "emit": "result",
+      "isError": true,
+      "text": "Something went wrong after editing."
+    },
+    {
+      "exit": 1
+    }
+  ],
+  "create": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "write",
+      "contentFrom": "two-slide.html"
+    },
+    {
+      "emit": "result",
+      "isError": true,
+      "text": "Something went wrong after writing."
+    },
+    {
+      "exit": 1
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Dies with stderr and no result event.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "stderr": "panic: fake crash"
+    },
+    {
+      "exit": 2
+    }
+  ]
+}

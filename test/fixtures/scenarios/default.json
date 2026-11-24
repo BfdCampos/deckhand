@@ -1,0 +1,62 @@
+{
+  "description": "Edit: read the deck, prefix the first h1 with \"Edited: \", tick every note. Create: write a valid two-slide deck.",
+  "edit": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking",
+      "delay": 30
+    },
+    {
+      "emit": "read",
+      "delay": 30
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true,
+      "delay": 30
+    },
+    {
+      "tick": "all"
+    },
+    {
+      "emit": "text",
+      "text": "I applied the notes and ticked them off."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ],
+  "create": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking",
+      "delay": 30
+    },
+    {
+      "emit": "write",
+      "contentFrom": "two-slide.html",
+      "delay": 30
+    },
+    {
+      "emit": "text",
+      "text": "I made a two-slide deck."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}

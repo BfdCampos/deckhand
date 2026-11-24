@@ -1,0 +1,32 @@
+{
+  "description": "Edits the deck and ticks only the first open note.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "read"
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true
+    },
+    {
+      "tick": "first"
+    },
+    {
+      "emit": "text",
+      "text": "I did the first note."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}
