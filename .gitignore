@@ -3,3 +3,5 @@ node_modules/
 *.deckhand.json
 *.deckhand.md
 deckhand-assets/
+test-results/
+playwright-report/
