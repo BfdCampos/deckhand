@@ -1,0 +1,18 @@
+{
+  "name": "deckhand",
+  "version": "0.1.0",
+  "description": "An HTML presentation editor built for AI. Edit by hand, leave notes for your agent, hand off in one click.",
+  "type": "module",
+  "bin": {
+    "deckhand": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js samples/sample-deck.html"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.1",
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deckhand</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <!-- Landing: choose a deck -->
+  <div id="landing" class="landing">
+    <div class="landing-card">
+      <div class="brand">⚓ Deckhand</div>
+      <p class="tagline">An HTML presentation editor, built for your AI.</p>
+      <p class="hint">Pick the <code>.html</code> deck you want to edit. Your AI keeps writing to the same file — your hand edits and notes ride along.</p>
+      <div id="picker" class="picker">
+        <div class="picker-path" id="picker-path"></div>
+        <div class="picker-list" id="picker-list"></div>
+      </div>
+      <div class="picker-manual">
+        <input id="manual-path" type="text" placeholder="…or paste an absolute path to a .html file" />
+        <button id="manual-open">Open</button>
+      </div>
+      <div id="landing-error" class="error"></div>
+    </div>
+  </div>
+
+  <!-- Editor -->
+  <div id="editor" class="editor hidden">
+    <div class="stage" id="stage">
+      <iframe id="deck" title="deck"></iframe>
+      <div id="overlay" class="overlay"></div>
+      <div id="dock" class="dock hidden"></div>
+    </div>
+
+    <aside class="sidebar">
+      <div class="sb-head">
+        <span class="brand-sm">⚓ Deckhand</span>
+        <span id="conn" class="conn">connecting…</span>
+      </div>
+      <div class="sb-file">
+        <span id="sb-file-path"></span>
+        <button id="open-another" class="link-btn" title="Open a different presentation">Open another deck →</button>
+      </div>
+
+      <div class="tools">
+        <button id="tool-text" title="Add a text box">+ Text</button>
+        <button id="tool-image" title="Add an image">+ Image</button>
+      </div>
+      <p class="tools-hint">Single-click to select · double-click text to edit · drag to move · right-click anything to leave a note for the AI · paste an image anywhere.</p>
+
+      <div class="sb-section">
+        <div class="sb-title">Notes for the AI <span id="notes-count" class="count">0</span></div>
+        <div id="notes-list" class="notes-list"></div>
+      </div>
+
+      <div class="sb-section activity hidden" id="activity">
+        <div class="sb-title">Activity <span id="activity-status" class="count"></span></div>
+        <div id="activity-log" class="activity-log"></div>
+      </div>
+
+      <div class="sb-foot">
+        <div class="split">
+          <button id="implement" class="implement">Hand off to AI →</button>
+          <button id="implement-caret" class="implement-caret" title="More options">▾</button>
+          <div id="implement-menu" class="menu hidden">
+            <button id="menu-copy">Copy prompt</button>
+            <button id="menu-show">Show prompt</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Note popover -->
+  <div id="note-pop" class="note-pop hidden">
+    <div class="note-pop-target" id="note-pop-target"></div>
+    <textarea id="note-pop-text" placeholder="Tell the AI what to change here…"></textarea>
+    <label class="note-scope"><input type="checkbox" id="note-scope" /> apply to all similar elements</label>
+    <div class="note-pop-actions">
+      <button id="note-cancel" class="ghost">Cancel</button>
+      <button id="note-save">Add note</button>
+    </div>
+  </div>
+
+  <!-- Pin popover (click a note pin on the slide) -->
+  <div id="pin-pop" class="note-pop hidden">
+    <div class="note-pop-target" id="pin-pop-meta"></div>
+    <textarea id="pin-pop-text"></textarea>
+    <div class="note-pop-actions">
+      <button id="pin-delete" class="ghost">Delete</button>
+      <button id="pin-save">Save</button>
+    </div>
+  </div>
+
+  <!-- Prompt modal (from "Show prompt") -->
+  <div id="impl-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>The prompt we hand your AI</h3>
+      <p>This runs automatically on hand-off. Paste it into Claude Code yourself if you'd rather. It points your agent at the work-order and the deck file, which it reads for the real structure and styles.</p>
+      <pre id="impl-prompt" class="impl-prompt"></pre>
+      <div class="modal-actions">
+        <button id="impl-copy">Copy prompt</button>
+        <button id="impl-close" class="ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

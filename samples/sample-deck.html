@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>Sample deck</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-snap-type: y mandatory; }
+    body { font-family: "Helvetica Neue", Arial, sans-serif; color: #14161c; }
+    .slide { height: 100vh; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: center; padding: 8vh 10vw; position: relative; }
+    .slide h1 { font-size: 64px; line-height: 1.05; letter-spacing: -0.02em; }
+    .slide h2 { font-size: 52px; margin-bottom: 24px; }
+    .slide p { font-size: 24px; line-height: 1.5; max-width: 40ch; color: #3a3f4b; }
+    .slide ul { font-size: 24px; line-height: 1.9; margin: 16px 0 0 24px; color: #3a3f4b; }
+    .s1 { background: linear-gradient(135deg, #2b5cff 0%, #1e46d0 100%); color: #fff; }
+    .s1 p { color: #dbe3ff; }
+    .s2 { background: #f6f7f9; }
+    .s3 { background: #101322; color: #fff; }
+    .s3 p, .s3 li { color: #c9cede; }
+    .kicker { font-size: 18px; text-transform: uppercase; letter-spacing: .18em; opacity: .8; margin-bottom: 16px; }
+    img.logo { width: 160px; margin-top: 32px; }
+    .pink { color: #ff7bc5; }
+    .emoji-bg { position: absolute; inset: 0; display: flex; flex-wrap: wrap; align-content: space-around; justify-content: space-around; padding: 4vh 4vw; font-size: 56px; line-height: 1; opacity: 0.28; pointer-events: none; user-select: none; }
+    .emoji-bg span { display: inline-block; }
+    .emoji-bg span:nth-child(6n+1) { transform: rotate(-18deg); }
+    .emoji-bg span:nth-child(6n+2) { transform: rotate(12deg); }
+    .emoji-bg span:nth-child(6n+3) { transform: rotate(-7deg); }
+    .emoji-bg span:nth-child(6n+4) { transform: rotate(22deg); }
+    .emoji-bg span:nth-child(6n+5) { transform: rotate(-13deg); }
+    .emoji-bg span:nth-child(6n) { transform: rotate(6deg); }
+</style>
+</head>
+<body>
+  <section class="slide s1" data-ai-id="dh11">
+    <p class="kicker" data-ai-id="dh1">LIVE DEMO</p>
+    <h1 data-ai-id="dh2"><span class="pink">C</span> p<span class="pink">r</span>e<span class="pink">s</span>e<span class="pink">n</span>t<span class="pink">a</span>t<span class="pink">i</span>o<span class="pink">n</span> y<span class="pink">o</span>u <span class="pink">a</span>n<span class="pink">d</span> y<span class="pink">o</span>u<span class="pink">r</span> A<span class="pink">I</span> e<span class="pink">d</span>i<span class="pink">t</span> t<span class="pink">o</span>g<span class="pink">e</span>t<span class="pink">h</span>e<span class="pink">r</span></h1>
+    <p data-ai-id="dh3">This deck is a plain HTML file. Every change you make here is written straight back to it.</p>
+  </section>
+
+  <section class="slide s2" data-ai-id="dh13">
+    <h2 data-ai-id="dh4">What you can do by hand</h2>
+    <ul>
+      <li data-ai-id="dh5">Double-click any text to edit it</li>
+      <li data-ai-id="dh6">Drag things to move them</li>
+      <li data-ai-id="dh7">Drop or paste an image, then resize it</li>
+    </ul>
+    <img class="logo" alt="placeholder logo" data-ai-id="dh8" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj48cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgcng9IjI0IiBmaWxsPSIjZmY0ZjQwIi8+PHRleHQgeD0iODAiIHk9IjEwNSIgZm9udC1zaXplPSI4NCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9ImJvbGQiPkI8L3RleHQ+PC9zdmc+" style="position: absolute; right: 10vw; bottom: 8vh; margin-top: 0;">
+  </section>
+
+  <section class="slide s2" data-ai-id="dh15" style="filter: invert(1);">
+    <h2 data-ai-id="dh16">What you can do by hand</h2>
+    <ul>
+      <li data-ai-id="dh17">Double-click any text to edit it</li>
+      <li data-ai-id="dh18">Drag things to move them</li>
+      <li data-ai-id="dh19">Drop or paste an image, then resize it</li>
+    </ul>
+    <img class="logo" alt="placeholder logo" data-ai-id="dh20" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj48cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgcng9IjI0IiBmaWxsPSIjZmY0ZjQwIi8+PHRleHQgeD0iODAiIHk9IjEwNSIgZm9udC1zaXplPSI4NCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9ImJvbGQiPkI8L3RleHQ+PC9zdmc+" style="position: absolute; right: 10vw; bottom: 8vh; margin-top: 0;">
+  </section>
+
+  <section class="slide s3" data-ai-id="dh14">
+    <div data-ai-id="dh21" aria-hidden="true" class="emoji-bg"><span>🚀</span><span>✨</span><span>🎉</span><span>📝</span><span>🖱️</span><span>🤖</span><span>💡</span><span>🎨</span><span>🖼️</span><span>📄</span><span>🔥</span><span>⭐️</span><span>🪄</span><span>🧩</span><span>💬</span><span>📌</span><span>🎯</span><span>🛠️</span><span>🧠</span><span>📎</span><span>🌈</span><span>💫</span><span>🖊️</span><span>📐</span><span>🎬</span><span>🪄</span><span>🔧</span><span>📊</span><span>🧭</span><span>🚦</span><span>🎈</span><span>🪅</span><span>🧵</span><span>📷</span><span>🗂️</span><span>🔮</span><span>💻</span><span>🖇️</span><span>🎁</span><span>🚢</span><span>✅</span><span>⚙️</span><span>🌟</span><span>📈</span><span>🧪</span><span>🔗</span><span>🖌️</span><span>💥</span><span>🪧</span><span>🗒️</span><span>🎀</span><span>🧱</span><span>🌀</span><span>📬</span><span>🕹️</span><span>🪁</span><span>🎇</span></div>
+    <h2 data-ai-id="dh9" style="position: relative; z-index: 1;">Everything else is a note</h2>
+    <p data-ai-id="dh10" style="position: relative; z-index: 1;">Right-click anything and tell the AI what you want. When you're done, hand off and your agent applies the lot.</p>
+  </section>
+
+
+</body></html>
