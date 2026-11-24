@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scripted deck</title>
+</head>
+<body>
+<section class="slide">
+  <h1 id="clock">Loading</h1>
+  <p>This heading is set by the deck's own script.</p>
+</section>
+<section class="slide">
+  <h2>Plain slide</h2>
+  <p>Nothing here changes at runtime.</p>
+</section>
+<script>
+  document.getElementById('clock').textContent = 'Set by script';
+  document.body.dataset.scripted = 'yes';
+</script>
+</body>
+</html>
