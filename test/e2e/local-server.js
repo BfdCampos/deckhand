@@ -52,7 +52,7 @@ export async function startDeckhand({ deck } = {}) {
     child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`Deckhand exited (${code}):\n${output}`)); });
   });
   const stop = async () => {
-    if (child.exitCode === null) {
+    if (child.exitCode === null && child.signalCode === null) {
       const exited = new Promise((r) => child.once('exit', r));
       child.kill('SIGTERM');
       await exited;
