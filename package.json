@@ -9,8 +9,8 @@
   "scripts": {
     "start": "node server.js",
     "demo": "node server.js samples/sample-deck.html",
-    "test": "node --test test/unit/ && playwright test --project=e2e",
-    "test:unit": "node --test test/unit/",
+    "test": "node --test \"test/unit/**/*.test.js\" && playwright test --project=e2e",
+    "test:unit": "node --test \"test/unit/**/*.test.js\"",
     "test:e2e": "playwright test --project=e2e",
     "test:live": "DECKHAND_LIVE=1 playwright test --project=live"
   },
