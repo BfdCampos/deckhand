@@ -68,6 +68,7 @@ export function mountNotes(ctx) {
   }
 
   async function change(body) {
+    if (!canChange()) return false;
     try {
       const res = await api.post('/api/notes', { deckId: ctx.deck.deckId, ...body });
       adopt({ deckId: ctx.deck.deckId, notes: res.notes, rev: res.rev });
@@ -260,6 +261,7 @@ export function mountNotes(ctx) {
   function closePopovers() {
     notePop?.close();
     pinPop?.close();
+    stopInlineEdit();
   }
 
   return {
