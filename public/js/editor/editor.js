@@ -85,7 +85,7 @@ export function createEditor({ onHome }) {
   store.subscribe(showConn);
   showConn(store.get());
 
-  onEvent((m) => { if (m.type === 'deck-changed' && ctx.deck) reload(); });
+  onEvent((m) => { if (m.type === 'deck-changed' && ctx.deck && !root.hidden) reload(); });
 
   function scheduleSave() {
     clearTimeout(saveTimer);
@@ -100,7 +100,9 @@ export function createEditor({ onHome }) {
   }
 
   function load() {
-    iframe.src = ctx.deck.url + '?t=' + Date.now();
+    const url = ctx.deck.url + '?t=' + Date.now();
+    if (iframe.contentWindow) iframe.contentWindow.location.replace(url);
+    else iframe.src = url;
   }
 
   function reload() {
@@ -111,7 +113,7 @@ export function createEditor({ onHome }) {
 
   function enhance() {
     const d = doc();
-    if (!d) return;
+    if (!d || root.hidden || d.URL === 'about:blank') return;
     injectAffordanceStyle(d);
     attachEscape(d);
     ensureIds(d);
@@ -136,6 +138,7 @@ export function createEditor({ onHome }) {
     },
     hide() {
       root.hidden = true;
+      iframe.contentWindow?.location.replace('about:blank');
       setToastHost(null);
     },
   };
