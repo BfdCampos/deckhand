@@ -256,7 +256,9 @@ export function mountNotes(ctx) {
     if (inline && !ctx.notes.some((n) => n.id === inline.id)) { inline.popEscape(); inline = null; }
     count.textContent = ctx.notes.filter(isOpen).length;
     if (!ctx.notes.length) {
-      list.replaceChildren(h('p', { class: 'notes-empty t-meta' }, 'No notes yet. Right-click anything on a slide to tell the AI what to change.'));
+      list.replaceChildren(h('div', { class: 'notes-empty-state' },
+        h('span', { class: 'notes-empty-icon' }, icon('note')),
+        h('p', { class: 'notes-empty t-small text-muted' }, 'No notes yet. Right-click anything on a slide to tell the AI what to change.')));
     } else {
       list.replaceChildren(...ctx.notes.map(card));
     }
