@@ -21,31 +21,37 @@ test('AC-6 with only Claude Code the chip reads Claude Code and has no dropdown'
 test.describe('with both agents', () => {
   test.use({ deckhandOptions: { deck: BASIC, agents: ['claude', 'codex'] } });
 
-  test('AC-7 the chip is a keyboard dropdown, the choice survives a restart and drives the next run', async ({ page, deckhand }) => {
-    await addNotes(deckhand, THREE);
-    await openEditor(page, deckhand);
-    await expect(chip(page)).toHaveAttribute('aria-haspopup', 'menu');
-    await expect(chip(page)).toContainText('Claude Code');
+  test.describe('across a restart', () => {
+    test.use({ allowedConsoleErrors: [[
+      /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/ws' failed: .*ERR_CONNECTION_REFUSED/,
+    ]] });
 
-    await chip(page).focus();
-    await page.keyboard.press('Enter');
-    const menu = page.getByRole('menu');
-    await expect(menu.getByRole('menuitemradio', { name: 'Claude Code' })).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Enter');
-    await expect(chip(page)).toContainText('Codex');
-    await expect(chip(page)).toBeFocused();
-    await expect(handoff(page)).toContainText('Hand off to Codex');
+    test('AC-7 the chip is a keyboard dropdown, the choice survives a restart and drives the next run', async ({ page, deckhand }) => {
+      await addNotes(deckhand, THREE);
+      await openEditor(page, deckhand);
+      await expect(chip(page)).toHaveAttribute('aria-haspopup', 'menu');
+      await expect(chip(page)).toContainText('Claude Code');
 
-    await deckhand.restart();
-    await openEditor(page, deckhand);
-    await expect(chip(page)).toContainText('Codex');
+      await chip(page).focus();
+      await page.keyboard.press('Enter');
+      const menu = page.getByRole('menu');
+      await expect(menu.getByRole('menuitemradio', { name: 'Claude Code' })).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Enter');
+      await expect(chip(page)).toContainText('Codex');
+      await expect(chip(page)).toBeFocused();
+      await expect(handoff(page)).toContainText('Hand off to Codex');
 
-    await handoff(page).click();
-    await expect(card(page).locator('.activity-state')).toHaveText('Done');
-    const [entry] = runs(deckhand);
-    expect(entry.tool).toBe('codex');
-    expect(entry.argv).toEqual(expect.arrayContaining(['exec', '--json', '--sandbox', 'workspace-write']));
+      await deckhand.restart();
+      await openEditor(page, deckhand);
+      await expect(chip(page)).toContainText('Codex');
+
+      await handoff(page).click();
+      await expect(card(page).locator('.activity-state')).toHaveText('Done');
+      const [entry] = runs(deckhand);
+      expect(entry.tool).toBe('codex');
+      expect(entry.argv).toEqual(expect.arrayContaining(['exec', '--json', '--sandbox', 'workspace-write']));
+    });
   });
 
   test('AC-10 Codex produces the same activity lines as Claude Code', async ({ page, deckhand }) => {
