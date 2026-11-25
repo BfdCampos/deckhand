@@ -5,8 +5,9 @@ import { icon } from '../ui/icons.js';
 export function createHome({ openDeck }) {
   const pathLabel = h('div', { class: 'picker-path' });
   const list = h('div', { class: 'picker-list' });
-  const error = h('div', { class: 'error', role: 'alert' });
-  const manual = h('input', { type: 'text', placeholder: '…or paste an absolute path to a .html file' });
+  const errorText = h('span', null);
+  const error = h('div', { class: 'field-error home-error', role: 'alert', hidden: true }, icon('alert-circle', { size: 14 }), errorText);
+  const manual = h('input', { type: 'text', class: 'input mono', placeholder: '…or paste an absolute path to a .html file', 'aria-label': 'Path to a deck' });
 
   const open = async (p) => {
     showError('');
@@ -17,24 +18,23 @@ export function createHome({ openDeck }) {
 
   const el = h('div', { class: 'landing', hidden: true },
     h('div', { class: 'landing-card' },
-      h('div', { class: 'brand' }, icon('anchor', { size: 24 }), 'Deckhand'),
-      h('p', { class: 'tagline' }, 'An HTML presentation editor, built for your AI.'),
-      h('p', { class: 'hint' },
+      h('div', { class: 'brand-lockup brand' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
+      h('p', { class: 'tagline t-card-title' }, 'An HTML presentation editor, built for your AI.'),
+      h('p', { class: 'hint t-small text-muted' },
         'Pick the ', h('code', null, '.html'), ' deck you want to edit. Your AI keeps writing to the same file, and your hand edits and notes ride along.',
       ),
       h('div', { class: 'picker' }, pathLabel, list),
-      h('div', { class: 'picker-manual' },
+      h('div', { class: 'input-group picker-manual' },
         manual,
-        h('button', { type: 'button', onclick: () => open(manual.value.trim()) }, 'Open'),
+        h('button', { type: 'button', class: 'btn btn-secondary', onclick: () => open(manual.value.trim()) }, 'Open'),
       ),
       error,
     ),
   );
 
   function row(name, iconName, onClick, cls) {
-    return h('div', { class: ['picker-row', cls], role: 'button', tabindex: '0', onclick: onClick,
-      onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } },
-      h('span', { class: 'ic' }, icon(iconName)),
+    return h('button', { type: 'button', class: ['list-row picker-row', cls], onclick: onClick },
+      icon(iconName),
       h('span', { class: 'name' }, name),
     );
   }
@@ -49,16 +49,20 @@ export function createHome({ openDeck }) {
     }
     pathLabel.textContent = d.path;
     const rows = [];
-    if (d.parent && d.parent !== d.path) rows.push(row('..', 'folder', () => loadDir(d.parent), 'up'));
+    if (d.parent && d.parent !== d.path) rows.push(row('..', 'folder-open', () => loadDir(d.parent), 'up'));
     for (const e of d.entries) {
       const full = d.path + '/' + e.name;
       if (e.isDir) rows.push(row(e.name, 'folder', () => loadDir(full)));
-      else rows.push(row(e.name, 'file', () => open(full), 'html'));
+      else rows.push(row(e.name, 'deck', () => open(full), 'html'));
     }
     list.replaceChildren(...rows);
   }
 
-  function showError(msg) { error.textContent = msg || ''; }
+  function showError(msg) {
+    const text = msg && typeof msg === 'object' ? msg.message : msg;
+    errorText.textContent = text || '';
+    error.hidden = !text;
+  }
 
   return {
     el,

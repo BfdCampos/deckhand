@@ -47,15 +47,26 @@ async function route({ boot = false } = {}) {
   showHome();
 }
 
+let lastServerId = null;
+
 onEvent((m) => {
+  if (m.type === 'error') { home.showError(m.error); return; }
   let deck;
-  if (m.type === 'bound' || m.type === 'deck') deck = normaliseDeck(m.deck);
-  else if (m.type === 'hello') deck = deckFromState(m.state);
-  else if (m.type === 'error') { home.showError(m.error); return; }
-  else return;
+  let reconnected = false;
+  if (m.type === 'hello') {
+    reconnected = lastServerId !== null;
+    lastServerId = m.serverId;
+    deck = deckFromState(m.state);
+  } else if (m.type === 'bound' || m.type === 'deck') {
+    deck = normaliseDeck(m.deck);
+  } else {
+    return;
+  }
   if (!deck) return;
+  const current = store.get().deck;
+  const changed = !current || current.path !== deck.path;
   store.set({ deck });
-  if (editor.visible) showEditor(deck, { push: false });
+  if (editor.visible && (changed || reconnected)) showEditor(deck, { push: false });
 });
 
 window.addEventListener('popstate', () => route());

@@ -2,6 +2,8 @@ import { h } from '../dom.js';
 import { onEvent, sendLegacy } from '../api.js';
 import { store } from '../store.js';
 import { icon } from '../ui/icons.js';
+import { setToastHost } from '../ui/toast.js';
+import { attachEscape } from '../ui/escape.js';
 import { bindFrame, doc, injectAffordanceStyle, ensureIds, serializeDeck } from './frame.js';
 import { createManual } from './manual.js';
 import { mountOverlay } from './overlay.js';
@@ -15,8 +17,11 @@ export function createEditor({ onHome }) {
   const iframe = h('iframe', { id: 'deck', title: 'deck' });
   const overlayEl = h('div', { id: 'overlay', class: 'overlay' });
   const dockEl = h('div', { id: 'dock', class: 'dock', hidden: true });
-  const filePath = h('span', { class: 'sb-file-path' });
-  const conn = h('span', { class: 'conn' });
+  const filePath = h('span', { class: 'sb-file-path t-meta' });
+  const connDot = h('span', { class: 'dot' });
+  const connLabel = h('span', null);
+  const conn = h('span', { class: 'conn t-meta' }, connDot, connLabel);
+  const stage = h('div', { class: 'stage' }, iframe, overlayEl, dockEl);
 
   const slots = {
     tools: h('div', { class: 'sb-tools' }),
@@ -26,15 +31,15 @@ export function createEditor({ onHome }) {
   };
 
   const root = h('div', { class: 'editor', hidden: true },
-    h('div', { class: 'stage' }, iframe, overlayEl, dockEl),
+    stage,
     h('aside', { class: 'sidebar' },
       h('div', { class: 'sb-head' },
-        h('span', { class: 'brand-sm' }, icon('anchor'), 'Deckhand'),
+        h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
         conn,
       ),
       h('div', { class: 'sb-file' },
         filePath,
-        h('button', { type: 'button', class: 'link-btn', title: 'Open a different presentation', onclick: () => onHome() }, 'Open another deck →'),
+        h('button', { type: 'button', class: 'link link-btn', title: 'Open a different presentation', onclick: () => onHome() }, 'Open another deck →'),
       ),
       slots.tools,
       slots.notes,
@@ -69,14 +74,16 @@ export function createEditor({ onHome }) {
 
   slots.tools.append(
     h('div', { class: 'tools' },
-      h('button', { type: 'button', title: 'Add a text box', onclick: () => ctx.manual.addText() }, '+ Text'),
-      h('button', { type: 'button', title: 'Add an image', onclick: () => ctx.manual.addImage() }, '+ Image'),
+      h('button', { type: 'button', class: 'btn btn-secondary', title: 'Add a text box', onclick: () => ctx.manual.addText() }, icon('plus'), 'Text'),
+      h('button', { type: 'button', class: 'btn btn-secondary', title: 'Add an image', onclick: () => ctx.manual.addImage() }, icon('image'), 'Image'),
     ),
-    h('p', { class: 'tools-hint' }, 'Single-click to select · double-click text to edit · drag to move · right-click anything to leave a note for the AI · paste an image anywhere.'),
+    h('p', { class: 'tools-hint t-meta' }, 'Single-click to select · double-click text to edit · drag to move · right-click anything to leave a note for the AI · paste an image anywhere.'),
   );
 
-  store.subscribe((s) => { conn.textContent = CONN_LABEL[s.conn] || ''; conn.classList.toggle('live', s.conn === 'live'); });
-  conn.textContent = CONN_LABEL[store.get().conn];
+  const CONN_DOT = { connecting: 'dot', live: 'dot dot-success', reconnecting: 'dot dot-warning' };
+  const showConn = (s) => { connLabel.textContent = CONN_LABEL[s.conn] || ''; connDot.className = CONN_DOT[s.conn] || 'dot'; };
+  store.subscribe(showConn);
+  showConn(store.get());
 
   onEvent((m) => { if (m.type === 'deck-changed' && ctx.deck) reload(); });
 
@@ -106,6 +113,7 @@ export function createEditor({ onHome }) {
     const d = doc();
     if (!d) return;
     injectAffordanceStyle(d);
+    attachEscape(d);
     ensureIds(d);
     ctx.manual.wire(d);
     ctx.notesApi.load();
@@ -117,13 +125,18 @@ export function createEditor({ onHome }) {
   return {
     el: root,
     ctx,
+    stage,
     get visible() { return !root.hidden; },
     open(deck) {
       ctx.deck = deck;
       filePath.textContent = deck.path;
       root.hidden = false;
+      setToastHost(stage);
       load();
     },
-    hide() { root.hidden = true; },
+    hide() {
+      root.hidden = true;
+      setToastHost(null);
+    },
   };
 }

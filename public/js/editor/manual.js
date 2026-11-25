@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { toast } from '../ui/toast.js';
+import { pushEscape } from '../ui/escape.js';
 import { doc, win, frameEl, closestEditable, currentSlide, parseTranslate, nextId, TEXT_SEL, IMG_SEL } from './frame.js';
 
 export function createManual(ctx) {
@@ -24,7 +25,6 @@ export function createManual(ctx) {
   function clearSelection() { ctx.selected = null; }
 
   function onMouseDown(e) {
-    ctx.notesApi.dismissEmpty();
     if (ctx.editing) return;
     const t = closestEditable(e.target);
     if (!t) { clearSelection(); return; }
@@ -64,7 +64,9 @@ export function createManual(ctx) {
     t.removeAttribute('data-dh-hover');
     t.focus();
     const onInput = () => ctx.scheduleSave();
+    const popEscape = pushEscape(() => { t.blur(); return true; });
     const onBlur = () => {
+      popEscape();
       t.removeAttribute('contenteditable');
       t.removeEventListener('input', onInput);
       t.removeEventListener('blur', onBlur);
