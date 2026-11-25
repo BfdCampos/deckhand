@@ -113,7 +113,7 @@ describe('launch', () => {
     try {
       const res = await request(srv.port, { path: '/api/state' });
       assert.equal(res.status, 200);
-      assert.equal(res.json.deck.deckPath, deck);
+      assert.equal(res.json.deck.path, deck);
       assert.equal(res.json.bound, true);
     } finally {
       await srv.stop();
