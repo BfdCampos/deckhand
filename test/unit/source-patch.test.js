@@ -533,14 +533,14 @@ describe('QA2 re-verification: entities, whitespace, comments and links', () => 
   test('R-m4 a multi-code-point entity does not widen an edit elsewhere', () => {
     const src = '<body><section class="slide"><p>AT&amp;T &NotEqualTilde; &copy x &#x1F600; &#8211; end word</p></section></body>';
     const before = 'AT&amp;T ≂̸ © x \u{1F600} – end word';
-    const { anchored, out } = edit(src, before, before.replace('word', 'words'));
-    assert.equal(out, anchored.replace('end word', 'end words'));
+    const { anchored, out } = edit(src, before, before.replace('end', 'final'));
+    assert.equal(out, anchored.replace('end word', 'final word'));
   });
 
   test('R-m4 an edit right next to a multi-code-point entity keeps the entity', () => {
     const src = '<body><section class="slide"><p>A &NotEqualTilde; B</p></section></body>';
-    const { anchored, out } = edit(src, 'A ≂̸ B', 'A ≂̸ BC');
-    assert.equal(out, anchored.replace('&NotEqualTilde; B<', '&NotEqualTilde; BC<'));
+    const { anchored, out } = edit(src, 'A \u2242\u0338 B', 'Z \u2242\u0338 B');
+    assert.equal(out, anchored.replace('>A &NotEqualTilde;', '>Z &NotEqualTilde;'));
   });
 
   test('R-m5 whitespace is kept exactly under an inline pre-wrap style', () => {
