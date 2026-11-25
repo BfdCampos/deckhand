@@ -57,3 +57,7 @@ test('every prompt asks for British English and no em-dashes', () => {
   ];
   for (const p of prompts) assert.ok(p.includes(line), p);
 });
+
+test('the build contract asks for real content, not placeholders', () => {
+  assert.ok(BUILD_CONTRACT.includes('Use real, specific content; never leave placeholder text like Lorem ipsum or [Your name].'));
+});

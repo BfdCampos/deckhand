@@ -51,3 +51,14 @@ test('meta phrases about the deck itself are left out of the name', () => {
 test('only the start of a very long description is used', () => {
   assert.equal(slugify('Tea ' + 'x'.repeat(100000)), 'tea');
 });
+
+test('names never end on a pronoun or a little joining word', () => {
+  assert.equal(slugify('Team offsite agenda: three themes we want to cover'), 'team-offsite-agenda-three-themes');
+  assert.equal(slugify('Plan the launch so that we can'), 'plan-launch');
+  assert.equal(slugify('Quarterly review numbers and what they mean'), 'quarterly-review-numbers');
+  const endings = new Set(['we', 'our', 'us', 'to', 'and', 'the', 'for', 'of', 'that', 'this', 'they', 'it', 'is', 'can', 'so', 'what', 'with', 'or', 'i', 'you']);
+  for (const d of ['Why we moved to the cloud and what it cost us', 'Five things I wish I knew about hiring for', 'How you and I can work with them so that', 'Results from the test that we ran with']) {
+    const last = slugify(d).split('-').at(-1);
+    assert.ok(!endings.has(last), `${d} -> ${slugify(d)}`);
+  }
+});
