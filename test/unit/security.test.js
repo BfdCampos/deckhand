@@ -65,7 +65,7 @@ describe('security', () => {
   });
 
   test('AC-59 foreign Host header gets 403 on every surface', async () => {
-    for (const p of ['/', '/api/state', '/deckroot/deck.html', '/app.js']) {
+    for (const p of ['/', '/api/state', '/deckroot/deck.html', '/js/main.js']) {
       for (const host of ['evil.example', `evil.example:${srv.port}`, `127.0.0.1:${srv.port + 1}`, `localhost.evil.example:${srv.port}`, '']) {
         const res = await request(srv.port, { path: p, host });
         assert.equal(res.status, 403, `${p} with Host "${host}"`);
@@ -224,7 +224,7 @@ describe('security', () => {
   });
 
   test('app pages carry security headers', async () => {
-    for (const p of ['/', '/create', '/edit', '/app.js']) {
+    for (const p of ['/', '/create', '/edit', '/js/main.js']) {
       const res = await request(srv.port, { path: p });
       assert.equal(res.status, 200, p);
       assert.equal(res.headers['x-frame-options'], 'SAMEORIGIN', p);
@@ -235,10 +235,10 @@ describe('security', () => {
   });
 
   test('static files under public/ are served generically with the right type', async () => {
-    const js = await request(srv.port, { path: '/app.js' });
+    const js = await request(srv.port, { path: '/js/main.js' });
     assert.equal(js.status, 200);
     assert.match(js.headers['content-type'], /text\/javascript/);
-    const css = await request(srv.port, { path: '/app.css' });
+    const css = await request(srv.port, { path: '/css/tokens.css' });
     assert.match(css.headers['content-type'], /text\/css/);
     const spa = await request(srv.port, { path: '/edit?deck=x' });
     assert.match(spa.headers['content-type'], /text\/html/);
