@@ -110,6 +110,7 @@ export function createStore({ stateDir }) {
     removeRecent,
     getAgent: () => data.agent,
     setAgent: (id) => mutate(async () => { data.agent = id || null; }),
+    update: (patch) => mutate(async () => { data = sanitise({ ...data, ...patch }); }),
     get: () => ({ ...data, recents: data.recents.map((r) => ({ ...r })) }),
     path: file,
   };
