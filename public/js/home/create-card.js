@@ -92,7 +92,7 @@ export function createCreateCard({ getInfo, onStarted }) {
     if (!text) { setTarget('Saves to', decksLabel()); return; }
     timer = setTimeout(async () => {
       try {
-        const res = await api.get(`/api/create/target?${new URLSearchParams({ description: text.slice(0, TARGET_CHARS) })}`);
+        const res = await api.post('/api/create/target', { description: text.slice(0, TARGET_CHARS) });
         if (mine === seq && res?.display) setTarget('Saves as', res.display);
       } catch { /* keep the last line */ }
     }, 150);
