@@ -11,6 +11,8 @@ import { anchorSource, indexSource, planOp, applySplices, invertSplices, rebaseR
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const MAX_JOURNAL = 500;
 const DEBOUNCE_MS = 100;
+const POLL_MS = 250;
+const RECHECK_MS = 150;
 
 const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer open.');
 const cannotUndo = () => new HttpError(409, 'cannot_undo', "That can't be undone any more.");
@@ -27,6 +29,8 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   let deck = null;
   let watcher = null;
   let debounce = null;
+  let recheck = null;
+  let polled = null;
   let locked = null;
   let mods = [];
   let journal = [];
@@ -96,6 +100,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       await fsp.rm(tmp, { force: true }).catch(() => {});
       throw new HttpError(500, 'write_failed', "Couldn't save the deck.");
     }
+    scheduleRecheck();
   }
 
   function checkDisk() {
@@ -119,8 +124,21 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
 
   async function stopWatching() {
     clearTimeout(debounce);
+    clearTimeout(recheck);
+    if (polled) fs.unwatchFile(polled.file, polled.listener);
+    polled = null;
     if (watcher) await watcher.close().catch(() => {});
     watcher = null;
+  }
+
+  function scheduleCheck(ms) {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => checkDisk().catch((e) => console.error('[deckhand] deck check failed:', e.message)), ms);
+  }
+
+  function scheduleRecheck() {
+    clearTimeout(recheck);
+    recheck = setTimeout(() => checkDisk().catch((e) => console.error('[deckhand] deck check failed:', e.message)), RECHECK_MS);
   }
 
   function startWatching() {
@@ -132,11 +150,11 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       ignored: (p) => p !== dir && p !== file,
     });
     const onEvent = (p) => {
-      if (p !== file) return;
-      clearTimeout(debounce);
-      debounce = setTimeout(() => checkDisk().catch((e) => console.error('[deckhand] deck check failed:', e.message)), DEBOUNCE_MS);
+      if (p === file) scheduleCheck(DEBOUNCE_MS);
     };
     watcher.on('add', onEvent).on('change', onEvent).on('unlink', onEvent).on('error', () => {});
+    polled = { file, listener: () => scheduleCheck(DEBOUNCE_MS) };
+    fs.watchFile(file, { interval: POLL_MS, persistent: false }, polled.listener);
     return new Promise((resolve) => {
       const timer = setTimeout(resolve, 2000);
       watcher.once('ready', () => { clearTimeout(timer); resolve(); });
@@ -315,6 +333,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       await fsp.chmod(tmp, deck.mode);
       await fsp.rename(tmp, deck.path);
       adopt(data, source);
+      scheduleRecheck();
     });
   }
 
