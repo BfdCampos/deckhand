@@ -19,7 +19,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'e2e', testIgnore: /live\.spec\.js$/ },
+    { name: 'e2e', testIgnore: /(live|perf)\.spec\.js$/ },
+    { name: 'perf', testMatch: /perf\.spec\.js$/, fullyParallel: false },
     { name: 'live', testMatch: /live\.spec\.js$/, timeout: 300_000, retries: 0 },
   ],
 });
