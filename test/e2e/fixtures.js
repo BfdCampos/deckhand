@@ -23,10 +23,11 @@ export const test = base.extend({
 
   failOnConsoleErrors: [async ({ context, allowedConsoleErrors }, use) => {
     const problems = [];
-    const allowed = (text) => allowedConsoleErrors.some((p) => (p instanceof RegExp ? p.test(text) : text.includes(p)));
+    const matches = (text) => allowedConsoleErrors.some((p) => (p instanceof RegExp ? p.test(text) : text.includes(p)));
+    const allowed = (...texts) => texts.some((t) => t && matches(t));
     const watch = (page) => {
       page.on('console', (msg) => {
-        if (msg.type() === 'error' && !allowed(msg.text())) problems.push(`console.error: ${msg.text()}`);
+        if (msg.type() === 'error' && !allowed(msg.text(), msg.location().url)) problems.push(`console.error: ${msg.text()} (${msg.location().url})`);
       });
       page.on('pageerror', (err) => {
         if (!allowed(err.message)) problems.push(`pageerror: ${err.message}`);
