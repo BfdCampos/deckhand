@@ -6,8 +6,10 @@ const notImage = () => new HttpError(415, 'not_image', 'That file is not an imag
 
 export function createAssets({ session }) {
   async function upload({ req }) {
-    const deckDir = session.meta()?.dir;
-    if (!deckDir) throw new HttpError(409, 'deck_closed', 'No deck is open.');
+    const meta = session.meta();
+    if (!meta) throw new HttpError(409, 'deck_closed', 'No deck is open.');
+    if (meta.readOnly) throw new HttpError(403, 'read_only', 'This deck is read-only.');
+    const deckDir = meta.dir;
     const type = String(req.headers['content-type'] || '').toLowerCase();
     if (!type.startsWith('image/')) throw notImage();
     const buf = await readBody(req, UPLOAD_LIMIT);
