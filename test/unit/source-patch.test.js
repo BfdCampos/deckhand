@@ -263,6 +263,12 @@ describe('setStyle', () => {
     }
   });
 
+  test('returns the exact new style value so the client can mirror it', () => {
+    const { after, plan } = style('<body><h1 style="color:#FFF;margin:0">Hi</h1></body>', { transform: 'translate(1px, 2px)' });
+    plan.verify(indexSource(after));
+    assert.equal(plan.result.style, 'color:#FFF;margin:0; transform: translate(1px, 2px);');
+  });
+
   test('reports the layout tweak for moves and resizes', () => {
     assert.deepEqual(style('<body><h1>Hi</h1></body>', { transform: 'translate(100px, -20px)' }).plan.tweak.next, { kind: 'move', tag: 'h1', dx: 100, dy: -20 });
     assert.deepEqual(style('<body><img src=a.png></body>', { width: '240px', height: '120px' }).plan.tweak.next, { kind: 'resize', tag: 'img', w: 240, h: 120 });

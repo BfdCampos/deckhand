@@ -140,7 +140,8 @@ describe('deck-session ops', () => {
   });
 
   test('AC-28 a move updates the style attribute and records the layout tweak', async () => {
-    await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(100px, 0px)' } }]);
+    const res = await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(100px, 0px)' } }]);
+    assert.equal(res.results[0].style, 'transform: translate(100px, 0px);');
     const disk = await fsp.readFile(s.file, 'utf8');
     assert.ok(disk.includes(`<p data-ai-id="${p}" style="transform: translate(100px, 0px);">`));
     assert.deepEqual(s.notes.tweaks()[p], { kind: 'move', tag: 'p', dx: 100, dy: 0 });
