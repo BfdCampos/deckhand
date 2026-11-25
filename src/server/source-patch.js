@@ -326,22 +326,174 @@ function checkInsertable(frag) {
   return roots[0];
 }
 
+const WS_CHARS = new Set([' ', '\t', '\n', '\f', '\r', '\u00A0']);
+const RAW_TEXT_TAGS = new Set(['style', 'script', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext', 'noscript']);
+const PRE_TAGS = new Set(['pre', 'textarea', 'listing', 'plaintext']);
+const REF_RE = /^&(?:#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[A-Za-z][A-Za-z0-9]*;?)/;
+const decoded = new Map();
+
+function decodeRef(ref) {
+  if (!decoded.has(ref)) decoded.set(ref, parseFragment(ref).childNodes[0]?.value ?? ref);
+  return decoded.get(ref);
+}
+
+const escText = (v) => v.replace(/&/g, '&amp;').replace(/\u00A0/g, '&nbsp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escAttr = (v) => v.replace(/&/g, '&amp;').replace(/\u00A0/g, '&nbsp;').replace(/"/g, '&quot;');
+
+function startTagString(node) {
+  const attrs = node.attrs.map((a) => {
+    const name = a.prefix ? `${a.prefix}:${a.name}` : a.name;
+    return ` ${name}="${escAttr(a.name === 'style' ? normaliseStyle(a.value) : a.value)}"`;
+  });
+  return `<${node.tagName}${attrs.join('')}>`;
+}
+
+function textPieces(src, start, end, value, raw) {
+  const out = [];
+  let i = start;
+  let k = 0;
+  while (k < value.length) {
+    if (i >= end) return null;
+    if (src[i] === '&' && !raw) {
+      const m = REF_RE.exec(src.slice(i, Math.min(end, i + 40)));
+      if (m) {
+        const d = decodeRef(m[0]);
+        if (d !== m[0] && value.startsWith(d, k)) {
+          if (Array.from(d).length !== 1) return null;
+          out.push({ v: d, start: i, end: i + m[0].length });
+          i += m[0].length;
+          k += d.length;
+          continue;
+        }
+      }
+    }
+    if (src[i] === '\r' && value[k] === '\n') {
+      const len = src[i + 1] === '\n' ? 2 : 1;
+      out.push({ v: '\n', start: i, end: i + len });
+      i += len;
+      k += 1;
+      continue;
+    }
+    const cp = String.fromCodePoint(src.codePointAt(i));
+    if (!value.startsWith(cp, k)) return null;
+    out.push({ v: cp, start: i, end: i + cp.length });
+    i += cp.length;
+    k += cp.length;
+  }
+  return i === end ? out : null;
+}
+
+function tokenize(html, tag, ns, withLoc) {
+  const frag = parseFragment(contextElement(tag, ns), html, { sourceCodeLocationInfo: withLoc });
+  const tokens = [];
+  const at = (loc, key) => (withLoc && loc ? loc[key] ?? null : null);
+  const walk = (parent, strict, raw) => {
+    for (const node of parent.childNodes || []) {
+      const loc = node.sourceCodeLocation;
+      if (node.nodeName === '#text') {
+        let pieces = withLoc && loc ? textPieces(html, loc.startOffset, loc.endOffset, node.value, raw) : null;
+        if (!pieces) pieces = Array.from(node.value).map((v) => ({ v, start: null, end: null }));
+        for (const piece of pieces) {
+          const last = tokens.at(-1);
+          if (!strict && !raw && WS_CHARS.has(piece.v)) {
+            if (last?.k === 'w') { last.v += piece.v; last.end = piece.end; continue; }
+            tokens.push({ k: 'w', ...piece });
+          } else {
+            tokens.push({ k: 't', raw, ...piece });
+          }
+        }
+      } else if (node.nodeName === '#comment') {
+        tokens.push({ k: 'c', v: `<!--${node.data}-->`, start: at(loc, 'startOffset'), end: at(loc, 'endOffset') });
+      } else if (node.tagName) {
+        tokens.push({ k: 's', v: startTagString(node), start: at(loc?.startTag, 'startOffset'), end: at(loc?.startTag, 'endOffset') });
+        walk(node.tagName === 'template' ? node.content : node, strict || PRE_TAGS.has(node.tagName), RAW_TEXT_TAGS.has(node.tagName));
+        if (!VOID_TAGS.has(node.tagName)) {
+          const endAt = withLoc && loc ? (loc.endTag ? loc.endTag.startOffset : loc.endOffset) : null;
+          tokens.push({ k: 'e', v: `</${node.tagName}>`, start: endAt, end: withLoc && loc ? (loc.endTag ? loc.endTag.endOffset : loc.endOffset) : null });
+        }
+      }
+    }
+  };
+  walk(frag, PRE_TAGS.has(tag), RAW_TEXT_TAGS.has(tag));
+  return { tokens, frag, length: html.length };
+}
+
+const same = (a, b) => a.k === b.k && (a.k === 'w' || a.v === b.v);
+
+function sameIgnoringSpace(a, b) {
+  const x = a.filter((t) => t.k !== 'w');
+  const y = b.filter((t) => t.k !== 'w');
+  return x.length === y.length && x.every((t, i) => t.k === y[i].k && t.v === y[i].v);
+}
+
+function emit(t) {
+  if (t.k === 't') return t.raw ? t.v : escText(t.v);
+  if (t.k === 'w') return t.v === '\u00A0' ? ' ' : escText(t.v);
+  return t.v;
+}
+
+function minimalSplice(src, dst) {
+  const s = src.tokens;
+  const a = dst.tokens;
+  let p = 0;
+  while (p < s.length && p < a.length && same(s[p], a[p])) p++;
+  let q = 0;
+  while (q < s.length - p && q < a.length - p && same(s[s.length - 1 - q], a[a.length - 1 - q])) q++;
+  let sStart = p;
+  let sEnd = s.length - q;
+  const aStart = p;
+  const aEnd = a.length - q;
+  if (sEnd > sStart && s[sEnd - 1].k === 'w' && !(aEnd > aStart && a[aEnd - 1].k === 'w')) sEnd--;
+  if (sEnd > sStart && s[sStart].k === 'w' && !(aEnd > aStart && a[aStart].k === 'w')) sStart++;
+  if (sStart === sEnd && aStart === aEnd) return [];
+  const start = sStart < s.length ? s[sStart].start : src.length;
+  const end = sEnd > sStart ? s[sEnd - 1].end : start;
+  if (start === null || end === null) return null;
+  return [{ start, end, text: a.slice(aStart, aEnd).map(emit).join('') }];
+}
+
+function riskySignatures(frag) {
+  const out = new Map();
+  const add = (sig) => out.set(sig, (out.get(sig) || 0) + 1);
+  const walk = (node) => {
+    for (const c of node.childNodes || []) {
+      if (!c.tagName) continue;
+      if (FORBIDDEN_TAGS.has(c.tagName)) add(`tag:${c.tagName}`);
+      for (const a of c.attrs || []) {
+        if (a.name.startsWith('on')) add(`on:${a.name}=${a.value}`);
+        if (URL_ATTRS.has(a.name) && /^\s*(javascript|vbscript|data:text\/html)/i.test(a.value)) add(`url:${a.value}`);
+      }
+      walk(c.tagName === 'template' ? c.content : c);
+    }
+  };
+  walk(frag);
+  return out;
+}
+
 function planSetInner(index, op) {
   const info = target(index, op);
   if (VOID_TAGS.has(info.tag)) throw badOp('That element has no content to edit.');
   if (typeof op.before !== 'string' || typeof op.after !== 'string') throw badOp('Missing before or after.');
   const sourceInner = index.source.slice(info.innerStart, info.innerEnd);
-  if (canonicalFragment(sourceInner, info.tag, info.ns) !== canonicalFragment(op.before, info.tag, info.ns)) {
+  const src = tokenize(sourceInner, info.tag, info.ns, true);
+  const before = tokenize(op.before, info.tag, info.ns, false);
+  if (!sameIgnoringSpace(src.tokens, before.tokens)) {
     throw new HttpError(409, 'script_owned', "This text is set by the deck's own script, so Deckhand can't save it.");
   }
-  const expected = canonicalFragment(op.after, info.tag, info.ns);
+  const after = tokenize(op.after, info.tag, info.ns, false);
+  const had = riskySignatures(before.frag);
+  for (const [sig, n] of riskySignatures(after.frag)) {
+    if (n > (had.get(sig) || 0)) throw badOp('Scripts, styles and event handlers are not allowed in text edits.');
+  }
+  const local = minimalSplice(src, after) ?? [{ start: 0, end: sourceInner.length, text: after.tokens.map(emit).join('') }];
   return {
-    splices: [{ start: info.innerStart, end: info.innerEnd, text: op.after }],
+    splices: local.map((sp) => ({ start: info.innerStart + sp.start, end: info.innerStart + sp.end, text: sp.text })),
     result: { aiId: info.aiId },
     verify(newIdx) {
       const t = newIdx.get(info.aiId);
       if (!t || t.tag !== info.tag) throw badOp('That change would break the deck structure.');
-      if (canonicalFragment(newIdx.source.slice(t.innerStart, t.innerEnd), t.tag, t.ns) !== expected) throw badOp('That change would break the deck structure.');
+      const now = tokenize(newIdx.source.slice(t.innerStart, t.innerEnd), t.tag, t.ns, false);
+      if (!sameIgnoringSpace(now.tokens, after.tokens)) throw badOp('That change would break the deck structure.');
       verifyStable(index, newIdx, { scope: info.aiId });
     },
   };
