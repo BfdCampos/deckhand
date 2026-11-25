@@ -110,7 +110,7 @@ test.describe('while an agent is working', () => {
   test('a create run makes the hand-off button read Busy with another run', async ({ page, deckhand }) => {
     await addNotes(deckhand, THREE);
     await openEditor(page, deckhand);
-    const run = await postApi(deckhand, '/api/runs', { kind: 'create', description: 'A deck about busy tests' });
+    const run = await postApi(deckhand, '/api/runs', { kind: 'create', description: 'A deck about busy tests [[fake:hang]]' });
     await expect(handoff(page)).toBeDisabled();
     await expect(handoff(page)).toContainText('Busy with another run');
     await expect(page.locator('.editor-pill')).toBeHidden();
