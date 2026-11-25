@@ -87,7 +87,44 @@ export function createManual(ctx) {
     e.preventDefault();
     if (!ctx.canEdit()) return;
     if (!aiIdOf(t)) { toast(UNANCHORED, { tone: 'error' }); return; }
-    startEdit(t);
+    startEdit(t, { x: e.clientX, y: e.clientY });
+  }
+
+  const WORD_CHAR = /[\p{L}\p{N}_'’-]/u;
+
+  function rangeAtPoint(d, x, y) {
+    if (d.caretRangeFromPoint) return d.caretRangeFromPoint(x, y);
+    const pos = d.caretPositionFromPoint?.(x, y);
+    if (!pos) return null;
+    const r = d.createRange();
+    r.setStart(pos.offsetNode, pos.offset);
+    return r;
+  }
+
+  function placeCaret(t, point) {
+    const d = doc();
+    let range = point ? rangeAtPoint(d, point.x, point.y) : null;
+    if (!range || !t.contains(range.startContainer)) {
+      range = d.createRange();
+      range.selectNodeContents(t);
+      range.collapse(false);
+    } else if (range.startContainer.nodeType === Node.TEXT_NODE) {
+      const node = range.startContainer;
+      let start = range.startOffset;
+      let end = start;
+      while (start > 0 && WORD_CHAR.test(node.data[start - 1])) start--;
+      while (end < node.data.length && WORD_CHAR.test(node.data[end])) end++;
+      if (end > start) {
+        const word = d.createRange();
+        word.setStart(node, start);
+        word.setEnd(node, end);
+        const box = word.getBoundingClientRect();
+        if (point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom) range = word;
+      }
+    }
+    const sel = win().getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 
   function innerOf(t) {
@@ -132,7 +169,7 @@ export function createManual(ctx) {
     if (text) insertPlainText(text);
   }
 
-  function startEdit(t) {
+  function startEdit(t, point = null) {
     clearSelection();
     ctx.editing = t;
     const before = innerOf(t);
@@ -143,6 +180,7 @@ export function createManual(ctx) {
     t.addEventListener('paste', onEditPaste);
     t.addEventListener('drop', onEditDrop);
     t.focus();
+    if (point) placeCaret(t, point);
     const popEscape = pushEscape(() => { t.blur(); return true; });
     const onBlur = () => {
       popEscape();
@@ -269,8 +307,26 @@ export function createManual(ctx) {
     }
     const img = doc().createElement('img');
     img.setAttribute('src', url);
-    img.setAttribute('style', 'max-width: 40%;');
+    await floatOverSlide(img, currentSlide());
     if (insertElement(img)) select(img);
+  }
+
+  async function floatOverSlide(img, slide) {
+    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; max-width: 40%; visibility: hidden;');
+    slide.appendChild(img);
+    try { await img.decode(); } catch { /* measure whatever loaded */ }
+    const s = slide.getBoundingClientRect();
+    const view = win().innerHeight;
+    const visibleTop = Math.max(s.top, 0);
+    const visibleBottom = Math.min(s.bottom, view);
+    const maxWidth = Math.min(img.naturalWidth || 320, s.width * 0.4);
+    img.style.maxWidth = '';
+    img.style.width = `${Math.round(maxWidth)}px`;
+    const r = img.getBoundingClientRect();
+    const left = Math.round(s.left + (s.width - r.width) / 2 - r.left);
+    const top = Math.round(Math.max(s.top, visibleTop + (visibleBottom - visibleTop - r.height) / 2) - r.top);
+    img.remove();
+    img.setAttribute('style', `position: absolute; left: ${left}px; top: ${top}px; width: ${Math.round(r.width)}px; max-width: 40%;`);
   }
 
   function deleteSelected() {
