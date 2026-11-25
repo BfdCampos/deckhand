@@ -19,6 +19,7 @@ const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer o
 const readOnly = () => new HttpError(403, 'read_only', 'This deck is read-only.');
 const deckChanged = () => new HttpError(409, 'deck_changed', 'That part of the deck changed on disk. Reloading.');
 const editConflict = () => new HttpError(409, 'edit_conflict', 'This text changed in another tab, so your edit wasn\'t saved.');
+const busy = (what) => new HttpError(423, 'run_active', `The agent is still editing this deck. Wait for it to finish, or stop it, before ${what}.`);
 const cannotUndo = () => new HttpError(409, 'cannot_undo', "That can't be undone any more.");
 
 async function writable(p) {
@@ -209,6 +210,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
 
   function open(p) {
     return run(async () => {
+      if (locked) throw busy('opening another deck');
       const { real, buf, mode } = await validateDeckPath(p, { home });
       await stopWatching();
       const dir = path.dirname(real);
@@ -246,6 +248,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
 
   function close() {
     return run(async () => {
+      if (locked) throw busy('closing this deck');
       await stopWatching();
       const had = !!deck;
       deck = null;
