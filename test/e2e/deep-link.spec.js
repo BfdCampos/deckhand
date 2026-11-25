@@ -50,7 +50,7 @@ test('Cancel on the deep link confirmation goes Home and opens nothing', async (
   await page.goto(`${deckhand.url}/edit?deck=${encodeURIComponent(other)}`);
   await page.getByRole('dialog', { name: 'Open this deck?' }).getByRole('button', { name: 'Cancel' }).click();
   await expect(page).toHaveURL(`${deckhand.url}/`);
-  await expect(page.locator('.landing')).toBeVisible();
+  await expect(page.locator('.home')).toBeVisible();
   expect(opens).toEqual([]);
   expect(await boundPath(page, deckhand)).toBe(deckhand.deckPath);
 });
@@ -105,6 +105,6 @@ test('Go Home from the other-tab notice leaves the editor', async ({ page, conte
   await shows(second, other);
 
   await page.locator('.editor-elsewhere').getByRole('button', { name: 'Go Home' }).click();
-  await expect(page.locator('.landing')).toBeVisible();
+  await expect(page.locator('.home')).toBeVisible();
   await expect(page).toHaveURL(`${deckhand.url}/`);
 });
