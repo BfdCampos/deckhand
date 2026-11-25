@@ -90,6 +90,16 @@ test.describe('failures', () => {
     await expect(input(page)).toHaveValue(description);
   });
 
+  test('an instant failure stays on the generation screen', async ({ page, deckhand }) => {
+    const description = withScenario('fail');
+    await startCreate(page, deckhand, description);
+    await expect(gen(page).getByRole('heading', { name: "That didn't work" })).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(300);
+    await expect(gen(page)).toBeVisible();
+    await expect(page.locator('.home')).toBeHidden();
+    await expect(page).toHaveURL(/\/create\?run=/);
+  });
+
   test('AC-17 finishing without a file says so', async ({ page, deckhand }) => {
     await startCreate(page, deckhand, withScenario('create-nothing'));
     await expect(gen(page).locator('.gen-error')).toHaveText('The agent finished without writing the deck.', { timeout: 10_000 });

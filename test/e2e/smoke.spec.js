@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
 import { test, expect } from './fixtures.js';
+import { editUrl } from './editor-helpers.js';
 
 test.use({ deckhandOptions: { deck: 'samples/sample-deck.html' } });
 
 test('opens the sample deck, edits a heading, and the file on disk changes', async ({ page, deckhand }) => {
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await expect(page.locator('.topbar-name')).toHaveText('sample-deck.html');
 
   const heading = page.frameLocator('iframe#deck').locator('h2[data-ai-id="dh4"]');

@@ -144,7 +144,11 @@ export function mountRuns(ctx) {
     card.setError(run.status === 'failed' ? trimError(run.error || 'The agent stopped without saying why.') : null);
 
     const actions = [];
-    if (run.status !== 'running' && run.canRevert && !run.reverted) actions.push({ label: 'Revert changes', icon: 'undo', onClick: confirmRevert });
+    if (run.status !== 'running' && run.canRevert && !run.reverted) {
+      actions.push(run.kind === 'create'
+        ? { label: 'Delete this deck', icon: 'trash', onClick: confirmRevert }
+        : { label: 'Revert changes', icon: 'undo', onClick: confirmRevert });
+    }
     if (run.status === 'failed') actions.push({ label: 'Copy prompt', icon: 'copy', onClick: () => copyPrompt({}) });
     card.setActions(actions);
   }
@@ -245,8 +249,9 @@ export function mountRuns(ctx) {
       startNotes = openNotes().map((n) => n.id);
       mergeLines(activity || []);
       card.setLines(sortedLines());
-    } else if (activity && mergeLines(activity)) {
-      card.setLines(sortedLines());
+    } else if (activity) {
+      const before = lines.size;
+      if (mergeLines(activity) || lines.size !== before) card.setLines(sortedLines());
     }
     const regressed = !fresh && run.status !== 'running' && next.status === 'running';
     run = regressed ? { ...next, status: run.status, endedAt: run.endedAt, error: run.error, summary: run.summary, canRevert: run.canRevert } : next;
@@ -342,7 +347,9 @@ export function mountRuns(ctx) {
       width: 440,
       actions: [
         { label: 'Cancel' },
-        { label: 'Revert changes', danger: true, icon: 'undo', onClick: ({ close }) => { close(); revert(target); } },
+        target.kind === 'create'
+          ? { label: 'Delete this deck', danger: true, icon: 'trash', onClick: ({ close }) => { close(); revert(target); } }
+          : { label: 'Revert changes', danger: true, icon: 'undo', onClick: ({ close }) => { close(); revert(target); } },
       ],
     });
   }

@@ -12,7 +12,7 @@ async function parse(res) {
   let body = null;
   try { body = await res.json(); } catch { }
   const err = body && body.error;
-  if (!res.ok || err) {
+  if (!res.ok) {
     if (err && typeof err === 'object') throw new ApiError(err.code || 'error', err.message || 'Something went wrong.', res.status);
     throw new ApiError('error', typeof err === 'string' ? err : `Request failed (${res.status}).`, res.status);
   }

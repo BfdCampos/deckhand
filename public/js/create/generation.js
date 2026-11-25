@@ -234,16 +234,15 @@ export function createGeneration({ openDeck, goHome, showRun }) {
         if (info && 'agents' in info) setAgents(info.agents);
       } catch { /* the run state below still loads */ }
     }
-    try {
-      const cur = await api.get('/api/runs/current');
-      if (id !== wantedId) return;
-      if (cur && cur.id === id) {
-        const { activity = [], ...state } = cur;
-        apply(state, { activity });
-        return;
-      }
-    } catch { /* fall through */ }
-    if (id === wantedId) goHome({});
+    let cur = null;
+    try { cur = await api.get('/api/runs/current'); } catch { cur = null; }
+    if (id !== wantedId) return;
+    if (cur && cur.id === id) {
+      const { activity = [], ...state } = cur;
+      apply(state, { activity });
+      return;
+    }
+    goHome({});
   }
 
   onEvent((m) => {

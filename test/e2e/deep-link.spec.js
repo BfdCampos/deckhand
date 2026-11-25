@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from './fixtures.js';
+import { editUrl } from './editor-helpers.js';
 
 test.use({ deckhandOptions: { deck: 'test/fixtures/decks/basic.html' } });
 
@@ -65,7 +66,7 @@ test('a deep link to the deck the server already has open goes straight in', asy
 
 test('a tab editing one deck does not silently switch when another tab opens a different deck', async ({ page, context, deckhand }) => {
   const other = makeOther(deckhand);
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await shows(page, deckhand.deckPath);
   const writes = [];
   page.on('request', (req) => { if (new URL(req.url()).pathname.startsWith('/api/deck/ops') || new URL(req.url()).pathname === '/api/notes' && req.method() === 'POST') writes.push(req.url()); });
@@ -97,7 +98,7 @@ test('a tab editing one deck does not silently switch when another tab opens a d
 
 test('Go Home from the other-tab notice leaves the editor', async ({ page, context, deckhand }) => {
   const other = makeOther(deckhand);
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await shows(page, deckhand.deckPath);
   const second = await context.newPage();
   await second.goto(`${deckhand.url}/edit?deck=${encodeURIComponent(other)}`);
