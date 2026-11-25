@@ -518,3 +518,76 @@ describe('M3 m2 n6 style and slide rules', () => {
     assert.equal(indexSource('<body><main><p>Just a page</p></main></body>').hasSlides, false);
   });
 });
+
+describe('QA2 re-verification: entities, whitespace, comments and links', () => {
+  function edit(src, before, after, extra = {}) {
+    const anchored = anchorSource(src).source;
+    const index = indexSource(anchored);
+    const [aiId, tag] = [...index.ids].find(([, t]) => t === 'p');
+    const plan = planOp(index, { type: 'setInner', aiId, tag, before, after, ...extra });
+    const out = applySplices(anchored, plan.splices).source;
+    plan.verify(indexSource(out));
+    return { anchored, out, plan };
+  }
+
+  test('R-m4 a multi-code-point entity does not widen an edit elsewhere', () => {
+    const src = '<body><section class="slide"><p>AT&amp;T &NotEqualTilde; &copy x &#x1F600; &#8211; end word</p></section></body>';
+    const before = 'AT&amp;T ≂̸ © x \u{1F600} – end word';
+    const { anchored, out } = edit(src, before, before.replace('word', 'words'));
+    assert.equal(out, anchored.replace('end word', 'end words'));
+  });
+
+  test('R-m4 an edit right next to a multi-code-point entity keeps the entity', () => {
+    const src = '<body><section class="slide"><p>A &NotEqualTilde; B</p></section></body>';
+    const { anchored, out } = edit(src, 'A ≂̸ B', 'A ≂̸ BC');
+    assert.equal(out, anchored.replace('&NotEqualTilde; B<', '&NotEqualTilde; BC<'));
+  });
+
+  test('R-m5 whitespace is kept exactly under an inline pre-wrap style', () => {
+    const src = '<body><section class="slide"><p style="white-space: pre-wrap">a b\nc</p></section></body>';
+    assert.equal(edit(src, 'a b\nc', 'a   b\nc').out, anchorSource(src).source.replace('>a b\nc<', '>a   b\nc<'));
+    assert.equal(edit(src, 'a b\nc', 'a b c').out, anchorSource(src).source.replace('>a b\nc<', '>a b c<'));
+  });
+
+  test('R-m5 the client can say whitespace matters for class-based styles', () => {
+    const src = '<body><section class="slide"><p class="code">a b</p></section></body>';
+    const { anchored, out, plan } = edit(src, 'a b', 'a  b', { whitespace: 'pre' });
+    assert.equal(out, anchored.replace('>a b<', '>a  b<'));
+    assert.equal(plan.result.changed, true);
+  });
+
+  test('R-m5 a whitespace-only change in normal text reports that nothing changed', () => {
+    const src = '<body><section class="slide"><p>a b</p></section></body>';
+    const { anchored, out, plan } = edit(src, 'a b', 'a  b');
+    assert.equal(out, anchored);
+    assert.equal(plan.result.changed, false);
+  });
+
+  test('R-m2 a line break typed after a comment keeps the comment', () => {
+    const src = '<body><section class="slide"><p>Hello <!-- keep this comment --> world</p></section></body>';
+    const { anchored, out } = edit(src, 'Hello <!-- keep this comment --> world', 'Hello <br>next');
+    assert.equal(out, anchored.replace('--> world</p>', '--> <br>next</p>'));
+  });
+
+  test('R-m2 replacing text around a comment keeps the comment', () => {
+    const src = '<body><section class="slide"><p>one <!-- c --> two</p></section></body>';
+    const { anchored, out } = edit(src, 'one <!-- c --> two', 'uno');
+    assert.match(out, /<p data-ai-id="dh\d+">uno<!-- c --><\/p>/);
+    assert.equal(out.replace(/<p data-ai-id="dh\d+">.*<\/p>/, ''), anchored.replace(/<p data-ai-id="dh\d+">.*<\/p>/, ''));
+  });
+
+  test('R-m1 text typed over the end of a link stays inside the link', () => {
+    const src = "<body><section class=\"slide\"><p>Click <A HREF='https://example.com' class=btn>here</A> now</p></section></body>";
+    const before = 'Click <a href="https://example.com" class="btn">here</a> now';
+    const a = edit(src, before, 'Click <a href="https://example.com" class="btn">t</a>here now');
+    assert.equal(a.out, a.anchored.replace('>here</A>', '>there</A>'));
+    const b = edit(src, before, 'Click <a href="https://example.com" class="btn">hE</a>RE now');
+    assert.equal(b.out, b.anchored.replace('>here</A>', '>hERE</A>'));
+  });
+
+  test('R-m1 text typed after a link on purpose stays after it', () => {
+    const src = "<body><section class=\"slide\"><p>Click <A HREF='https://example.com' class=btn>here</A> now</p></section></body>";
+    const { anchored, out } = edit(src, 'Click <a href="https://example.com" class="btn">here</a> now', 'Click <a href="https://example.com" class="btn">here</a>! now');
+    assert.equal(out, anchored.replace('</A> now', '</A>! now'));
+  });
+});
