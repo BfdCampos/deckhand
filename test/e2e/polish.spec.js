@@ -4,8 +4,6 @@ import { SCREENS, screen, settle, horizontalOverflow, overlaps, contrastFailures
 // UI issues found by these checks and reported for fixing (owners in brackets). Matching findings are
 // recorded as annotations instead of failing; remove each entry once its fix lands.
 const KNOWN_UI_ISSUES = [
-  // public/css/runs.css:104 `.activity-line.kind-error` uses --error (#ff4f40-ish) on the card: 4.34:1 (Dev H)
-  /^span\.activity-text "[^"]*": 4\.3\d < 4\.5 \(rgb\(255, 79, 64\)/,
 ];
 
 function unexpected(findings, testInfo) {
