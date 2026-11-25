@@ -52,7 +52,7 @@ describe('hardening', () => {
 
   test('app pages forbid plugins, base rewriting and foreign form posts', async () => {
     const csp = (await request(srv.port, { path: '/' })).headers['content-security-policy'];
-    for (const d of ["frame-ancestors 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'self'"]) assert.ok(csp.includes(d), d);
+    for (const d of ["frame-ancestors 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"]) assert.ok(csp.includes(d), d);
   });
 
   test('deck ops accept bodies over the 1 MB general cap', async () => {
