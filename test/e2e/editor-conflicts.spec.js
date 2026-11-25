@@ -214,3 +214,15 @@ test.describe('whitespace', () => {
     await expect(normal).toHaveText('Plain words');
   });
 });
+
+test.describe('links in the deck', () => {
+  test.use({ deckhandOptions: {} });
+
+  test('clicking a link selects it instead of leaving the deck', async ({ page, deckhand }) => {
+    const file = await writeDeck(deckhand.home, 'link.html', '<!DOCTYPE html><html><head><title>L</title></head><body><section class="slide"><p>Go <a href="https://example.com">there</a></p></section></body></html>');
+    await openDeckAt(page, deckhand, file);
+    await deckFrame(page).locator('a').click();
+    await page.waitForTimeout(500);
+    expect(await page.locator('iframe#deck').evaluate((f) => f.contentWindow.location.pathname)).toBe('/deckroot/link.html');
+  });
+});
