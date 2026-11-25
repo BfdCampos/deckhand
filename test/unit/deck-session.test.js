@@ -125,7 +125,7 @@ describe('deck-session ops', () => {
   test('AC-27 the first op writes anchors plus exactly that change', async () => {
     const anchored = s.session.servedSource();
     const res = await apply([{ opId: 'o1', type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Better title' }]);
-    assert.deepEqual(res.results, [{ opId: 'o1', aiId: h1 }]);
+    assert.deepEqual(res.results, [{ opId: 'o1', aiId: h1, changed: true }]);
     assert.ok(res.rev > meta.rev);
     const disk = await fsp.readFile(s.file, 'utf8');
     assert.equal(disk, anchored.replace('>Title<', '>Better title<'));
@@ -433,7 +433,7 @@ describe('deck routes over HTTP', () => {
 
     const ops = await post('/api/deck/ops', { deckId: deck.deckId, tabId: 'tab1', baseRev: deck.rev, ops: [{ opId: 'o1', type: 'setInner', aiId: h2, tag: 'h2', before: 'Plain slide', after: 'Edited slide' }] });
     assert.equal(ops.status, 200, JSON.stringify(ops.json));
-    assert.deepEqual(ops.json.results, [{ opId: 'o1', aiId: h2 }]);
+    assert.deepEqual(ops.json.results, [{ opId: 'o1', aiId: h2, changed: true }]);
     assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes('>Edited slide<'));
 
     const clock = /<h1 data-ai-id="(dh\d+)" id="clock">/.exec(served)[1];
