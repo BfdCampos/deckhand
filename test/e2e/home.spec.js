@@ -1,36 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from './fixtures.js';
-import { mockHome } from './home-mock.js';
+import { slugify } from '../../src/shared/slug.js';
+import {
+  makeDeck, realHome, decksDir, postApi, openAsRecent, openHome, trackRequests,
+  input, createBtn, pathField, topName, homeChip,
+} from './home-helpers.js';
 
-// Recents, Browse, open validation and the create target are mocked (see
-// home-mock.js) until WP4.2 and WP3.1 land; opening a valid deck is the real
-// server.
-
-const NOISE = [/\/deckroot\/[^?]*\.deckhand\.json(\?|$)|Failed to load resource: the server responded with a status of 400/];
-test.use({ allowedConsoleErrors: NOISE });
-
-const DECK = '<!DOCTYPE html><html><head><title>t</title></head><body><section class="slide"><h1>Hello</h1></section></body></html>';
-
-function makeDeck(dir, name, body = DECK) {
-  fs.mkdirSync(dir, { recursive: true });
-  const p = path.join(dir, name);
-  fs.writeFileSync(p, body);
-  return p;
-}
-
-async function openHome(page, deckhand, opts) {
-  const mock = await mockHome(page, deckhand, opts);
-  await page.goto(deckhand.url);
-  await expect(page.locator('.home')).toBeVisible();
-  await mock.ready();
-  await page.waitForLoadState('networkidle');
-  return mock;
-}
-
-const input = (page) => page.getByRole('textbox', { name: 'Describe the deck you want' });
-const createBtn = (page) => page.locator('.create-submit');
-const pathField = (page) => page.getByRole('textbox', { name: 'Deck path' });
+test.use({
+  deckhandOptions: { agents: ['claude'] },
+  expectedApiErrors: [{ path: '/api/deck/open', status: 400 }],
+});
 
 test('Home lays out the headline, both cards and the agent chip', async ({ page, deckhand }) => {
   await openHome(page, deckhand);
@@ -38,33 +18,37 @@ test('Home lays out the headline, both cards and the agent chip', async ({ page,
   await expect(page.getByText('Describe it and your agent builds it, or open one you already have. It stays a single HTML file the whole time.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Create a new deck' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Open a deck' })).toBeVisible();
-  await expect(page.locator('.home .home-top .agent-chip')).toHaveText('Claude Code');
+  await expect(homeChip(page)).toHaveText('Claude Code');
   await expect(input(page)).toBeFocused();
 });
 
 test('AC-11 Create deck is disabled when empty or blank and Cmd/Ctrl+Enter submits', async ({ page, deckhand }) => {
-  const mock = await openHome(page, deckhand);
+  await openHome(page, deckhand);
+  const runs = trackRequests(page, '/api/runs');
   await expect(createBtn(page)).toBeDisabled();
   await input(page).fill('   \n  ');
   await expect(createBtn(page)).toBeDisabled();
   await page.keyboard.press('ControlOrMeta+Enter');
-  expect(mock.callsTo('POST', '/api/runs')).toHaveLength(0);
-  await input(page).fill('A 6-slide pitch for our new coffee subscription');
+  await page.waitForTimeout(200);
+  expect(runs).toEqual([]);
+  await input(page).fill('A short deck about tidy desks');
   await expect(createBtn(page)).toBeEnabled();
   await page.keyboard.press('ControlOrMeta+Enter');
-  await expect.poll(() => mock.callsTo('POST', '/api/runs').map((c) => c.body))
-    .toEqual([{ kind: 'create', description: 'A 6-slide pitch for our new coffee subscription' }]);
+  await expect.poll(() => runs).toEqual([{ kind: 'create', description: 'A short deck about tidy desks' }]);
+  await expect(page.locator('.generation')).toBeVisible();
 });
 
-test('AC-12 the Saves as line follows the description and steps past an existing name', async ({ page, deckhand }) => {
-  const mock = await openHome(page, deckhand);
+test('AC-12 the Saves as line follows the naming rules and steps past an existing name', async ({ page, deckhand }) => {
+  await openHome(page, deckhand);
   const line = page.locator('.create-target');
   await expect(line).toHaveText('Saves to ~/Deckhand');
-  await input(page).fill('Coffee subscription pitch');
-  await expect(line).toHaveText('Saves as ~/Deckhand/coffee-subscription-pitch.html');
-  makeDeck(mock.decksDir, 'coffee-subscription-pitch.html');
-  await input(page).fill('Coffee subscription pitch ');
-  await expect(line).toHaveText('Saves as ~/Deckhand/coffee-subscription-pitch-2.html');
+  const description = 'Make me a 6-slide pitch for our new coffee subscription';
+  const slug = slugify(description);
+  await input(page).fill(description);
+  await expect(line).toHaveText(`Saves as ~/Deckhand/${slug}.html`);
+  makeDeck(decksDir(deckhand), `${slug}.html`);
+  await input(page).fill(`${description} `);
+  await expect(line).toHaveText(`Saves as ~/Deckhand/${slug}-2.html`);
   await input(page).fill('');
   await expect(line).toHaveText('Saves to ~/Deckhand');
 });
@@ -78,36 +62,38 @@ test('AC-20 the draft survives a refresh', async ({ page, deckhand }) => {
 });
 
 test('AC-21 opening from the path field lands in the editor', async ({ page, deckhand }) => {
-  const deck = makeDeck(path.join(deckhand.home, 'talks'), 'roadmap.html');
+  const deck = makeDeck(path.join(realHome(deckhand), 'talks'), 'roadmap.html');
   await openHome(page, deckhand);
   await pathField(page).fill(deck);
   await page.keyboard.press('Enter');
-  await expect(page.locator('.sb-file')).toContainText(deck);
+  await expect(topName(page)).toHaveText('roadmap.html');
+  await expect(topName(page)).toHaveAttribute('title', deck);
   await expect(page).toHaveURL(/\/edit\?deck=/);
 });
 
 test('AC-21 opening from recents lands in the editor', async ({ page, deckhand }) => {
-  const deck = makeDeck(path.join(deckhand.home, 'talks'), 'q3-roadmap.html');
-  await openHome(page, deckhand, { recents: [{ path: deck }] });
+  const deck = makeDeck(path.join(realHome(deckhand), 'talks'), 'q3-roadmap.html');
+  await openAsRecent(deckhand, deck);
+  await openHome(page, deckhand);
   const row = page.locator('.recent-row').first();
   await expect(row.locator('.recent-name')).toHaveText('q3-roadmap.html');
   await expect(row.locator('.recent-dir')).toHaveText('~/talks');
   await expect(row.locator('.recent-time')).toHaveText('Just now');
   await row.click();
-  await expect(page.locator('.sb-file')).toContainText(deck);
+  await expect(topName(page)).toHaveAttribute('title', deck);
 });
 
 test('AC-21 and AC-25 Browse lists folders then decks, walks the breadcrumb and opens a deck', async ({ page, deckhand }) => {
-  const mock = await openHome(page, deckhand);
-  makeDeck(mock.decksDir, 'b-deck.html');
-  makeDeck(mock.decksDir, 'a-deck.htm');
-  fs.writeFileSync(path.join(mock.decksDir, 'notes.txt'), 'not a deck');
-  fs.mkdirSync(path.join(mock.decksDir, 'drafts'));
-  const inner = makeDeck(path.join(mock.decksDir, 'drafts'), 'inner.html');
+  const dir = decksDir(deckhand);
+  makeDeck(dir, 'b-deck.html');
+  makeDeck(dir, 'a-deck.htm');
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'not a deck');
+  fs.mkdirSync(path.join(dir, 'drafts'));
+  const inner = makeDeck(path.join(dir, 'drafts'), 'inner.html');
+  await openHome(page, deckhand);
 
   await page.getByRole('button', { name: 'Browse…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Choose a deck' });
-  await expect(dialog).toBeVisible();
   const rows = dialog.locator('.browse-row');
   await expect(rows).toHaveText(['drafts', 'a-deck.htm', 'b-deck.html']);
   await expect(dialog.locator('.browse-crumbs')).toContainText('Deckhand');
@@ -131,11 +117,11 @@ test('AC-21 and AC-25 Browse lists folders then decks, walks the breadcrumb and 
   await page.getByRole('button', { name: 'Browse…' }).click();
   await dialog.locator('.browse-row', { hasText: 'drafts' }).click();
   await dialog.locator('.browse-row', { hasText: 'inner.html' }).click();
-  await expect(page.locator('.sb-file')).toContainText(inner);
+  await expect(topName(page)).toHaveAttribute('title', inner);
 });
 
 test('AC-22 every open error shows its own copy inline', async ({ page, deckhand }) => {
-  const dir = path.join(deckhand.home, 'bad');
+  const dir = path.join(realHome(deckhand), 'bad');
   const txt = makeDeck(dir, 'notes.txt', 'hello');
   const empty = makeDeck(dir, 'empty.html', '   ');
   const locked = makeDeck(dir, 'locked.html');
@@ -161,46 +147,51 @@ test('AC-22 every open error shows its own copy inline', async ({ page, deckhand
 });
 
 test('AC-23 a missing recent is greyed, does nothing on click and can be removed', async ({ page, deckhand }) => {
-  const gone = path.join(deckhand.home, 'old', 'gone.html');
-  const deck = makeDeck(path.join(deckhand.home, 'talks'), 'kept.html');
-  const mock = await openHome(page, deckhand, { recents: [{ path: gone }, { path: deck }] });
+  const gone = makeDeck(path.join(realHome(deckhand), 'old'), 'gone.html');
+  const kept = makeDeck(path.join(realHome(deckhand), 'talks'), 'kept.html');
+  await openAsRecent(deckhand, gone, kept);
+  fs.rmSync(gone);
+  await openHome(page, deckhand);
+  const opens = trackRequests(page, '/api/deck/open');
   const missing = page.locator('.recent-row', { hasText: 'gone.html' });
   await expect(missing).toHaveClass(/is-missing/);
   await expect(missing).toContainText('Missing');
   await missing.locator('.recent-open').click({ force: true });
   await expect(page.locator('.home')).toBeVisible();
-  expect(mock.callsTo('POST', '/api/open')).toHaveLength(0);
+  expect(opens).toEqual([]);
   await missing.getByRole('button', { name: 'Remove from recents' }).click();
   await expect(page.locator('.recent-row')).toHaveCount(1);
-  expect(mock.homeState.removed).toEqual([gone]);
+  await page.reload();
+  await expect(page.locator('.recent-row')).toHaveText(/kept\.html/);
 
-  const kept = page.locator('.recent-row', { hasText: 'kept.html' });
-  await kept.hover();
-  await expect(kept.getByRole('button', { name: 'Remove from recents' })).toBeVisible();
+  const row = page.locator('.recent-row', { hasText: 'kept.html' });
+  await row.hover();
+  await expect(row.getByRole('button', { name: 'Remove from recents' })).toBeVisible();
 });
 
 test('AC-24 file names in recents render as literal text', async ({ page, deckhand }) => {
   const evil = '<img src=x onerror=alert(1)>';
-  const deck = makeDeck(path.join(deckhand.home, evil), `${evil}.html`);
-  await openHome(page, deckhand, { recents: [{ path: deck }] });
+  const deck = makeDeck(path.join(realHome(deckhand), evil), `${evil}.html`);
+  await openAsRecent(deckhand, deck);
+  await openHome(page, deckhand);
   await expect(page.locator('.recent-name')).toHaveText(`${evil}.html`);
   await expect(page.locator('#app img')).toHaveCount(0);
 });
 
 test('empty recents offer the sample deck', async ({ page, deckhand }) => {
-  const mock = await openHome(page, deckhand);
+  await openHome(page, deckhand);
   await expect(page.locator('.recents-empty')).toContainText('Decks you open or create will show up here.');
   await page.getByRole('button', { name: 'Try the sample deck' }).click();
-  await expect(page.locator('.sb-file')).toContainText(mock.sampleDeck);
+  await expect(topName(page)).toHaveText('sample-deck.html');
 });
 
 test.describe('with no agent', () => {
   test.use({ deckhandOptions: { agents: [] } });
 
   test('AC-8 Home shows the No agent state, no Create deck, and Open still works', async ({ page, deckhand }) => {
-    const deck = makeDeck(path.join(deckhand.home, 'talks'), 'still-opens.html');
-    const mock = await openHome(page, deckhand, { agents: [] });
-    await expect(page.locator('.home .home-top .agent-chip')).toContainText('No agent');
+    const deck = makeDeck(path.join(realHome(deckhand), 'talks'), 'still-opens.html');
+    await openHome(page, deckhand);
+    await expect(homeChip(page)).toContainText('No agent');
     const empty = page.locator('.create-empty');
     await expect(empty).toContainText('Deckhand needs Claude Code or Codex to create and edit decks for you.');
     await expect(empty).toContainText('Install one, then click Check again.');
@@ -208,24 +199,29 @@ test.describe('with no agent', () => {
     await expect(empty.getByRole('link', { name: 'Codex' })).toHaveAttribute('target', '_blank');
     await expect(createBtn(page)).toHaveCount(0);
 
-    mock.setFound(['claude']);
+    deckhand.setAgents(['claude']);
     await empty.getByRole('button', { name: 'Check again' }).click();
     await expect(input(page)).toBeVisible();
-    await expect(page.locator('.home .home-top .agent-chip')).toHaveText('Claude Code');
+    await expect(homeChip(page)).toHaveText('Claude Code');
 
     await pathField(page).fill(deck);
     await page.keyboard.press('Enter');
-    await expect(page.locator('.sb-file')).toContainText(deck);
+    await expect(topName(page)).toHaveAttribute('title', deck);
   });
 });
 
 test('back from the editor returns Home with the deck first in recents', async ({ page, deckhand }) => {
-  const deck = makeDeck(path.join(deckhand.home, 'talks'), 'first.html');
-  await openHome(page, deckhand);
-  await pathField(page).fill(deck);
+  const first = makeDeck(path.join(realHome(deckhand), 'talks'), 'first.html');
+  const older = makeDeck(path.join(realHome(deckhand), 'talks'), 'older.html');
+  await postApi(deckhand, '/api/deck/open', { path: older });
+  await page.goto(deckhand.url);
+  await expect(topName(page)).toHaveAttribute('title', older);
+  await page.getByRole('button', { name: '← Home' }).click();
+  await expect(page.locator('.home')).toBeVisible();
+  await pathField(page).fill(first);
   await page.keyboard.press('Enter');
-  await expect(page.locator('.sb-file')).toContainText(deck);
+  await expect(topName(page)).toHaveAttribute('title', first);
   await page.goBack();
   await expect(page.locator('.home')).toBeVisible();
-  await expect(page.locator('.recent-row').first().locator('.recent-name')).toHaveText('first.html');
+  await expect(page.locator('.recent-row .recent-name')).toHaveText(['first.html', 'older.html']);
 });
