@@ -159,6 +159,7 @@ export function createSaver(ctx) {
     redo: () => replay('redo'),
     flush: () => chain,
     clearHistory: () => history.clear(),
+    reset() { failure = null; render(); },
     get busy() { return pending > 0; },
   };
 }

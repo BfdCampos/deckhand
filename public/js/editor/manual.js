@@ -57,7 +57,7 @@ export function createManual(ctx) {
       const done = drag;
       drag = null;
       if (!done.moved) return;
-      if (!ctx.canEdit()) { setStyleAttr(done.t, done.prevStyle); return; }
+      if (!ctx.canFinish()) { setStyleAttr(done.t, done.prevStyle); return; }
       saveStyle(done.t, done.prevStyle, { transform: done.t.style.transform });
     };
     d.addEventListener('mousemove', move, true);
@@ -102,7 +102,7 @@ export function createManual(ctx) {
       t.removeAttribute('contenteditable');
       if (ctx.editing === t) ctx.editing = null;
       const after = cleanInner(t);
-      if (after !== before && !ctx.canEdit()) {
+      if (after !== before && !ctx.canFinish()) {
         setInnerHtml(t, before);
       } else if (after !== before) {
         saver.apply(() => ({ type: 'setInner', aiId: aiIdOf(t), tag: t.tagName.toLowerCase(), before, after }), {
@@ -143,7 +143,7 @@ export function createManual(ctx) {
       window.removeEventListener('mouseup', up);
       iframe.style.pointerEvents = '';
       if (!changed) return;
-      if (!ctx.canEdit()) { setStyleAttr(img, prevStyle); return; }
+      if (!ctx.canFinish()) { setStyleAttr(img, prevStyle); return; }
       saveStyle(img, prevStyle, { width: img.style.width, height: img.style.height });
     };
     window.addEventListener('mousemove', move);
