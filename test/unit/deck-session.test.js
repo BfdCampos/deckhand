@@ -413,12 +413,16 @@ describe('deck routes over HTTP', () => {
     assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes(`<h2 data-ai-id="${h2}">`));
   });
 
-  test('copying the prompt writes the anchors too', async () => {
+  test('the copied prompt only names anchors that are already in the file', async () => {
     const state = await (await fetch(dh.url + '/api/state')).json();
-    const res = await post('/api/implement', {});
+    const served = await (await fetch(dh.url + state.deck.url)).text();
+    const h2 = /<h2 data-ai-id="(dh\d+)">/.exec(served)[1];
+    await post('/api/notes', { deckId: state.deck.deckId, op: 'add', note: { aiId: h2, targetTag: 'h2', text: 'Bigger' } });
+    const res = await fetch(dh.url + '/api/prompt?scope=all');
     assert.equal(res.status, 200);
-    assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes('data-ai-id'));
-    assert.ok(state.deck);
+    const { workOrderPath } = await res.json();
+    assert.ok(fs.readFileSync(workOrderPath, 'utf8').includes(`data-ai-id="${h2}"`));
+    assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes(`<h2 data-ai-id="${h2}">`));
   });
 
   test('deck routes refuse foreign origins and non-JSON', async () => {
