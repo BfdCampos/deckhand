@@ -59,7 +59,7 @@ function stateSnapshot() {
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home),
+  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home, { home: config.home }),
   'POST /api/open': async ({ body }) => {
     await openDeck(body.path);
     return session.publicState();
