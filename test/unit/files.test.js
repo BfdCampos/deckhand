@@ -217,11 +217,13 @@ describe('home routes over HTTP', () => {
   });
 
   test('a corrupt state file at startup does not stop the server', async () => {
-    dh = await startDeckhand({ agents: [] });
-    fs.mkdirSync(path.join(dh.home, '.deckhand'), { recursive: true });
-    fs.writeFileSync(path.join(dh.home, '.deckhand', 'state.json'), 'not json');
-    await dh.restart();
+    const first = await startDeckhand({ agents: [] });
+    fs.mkdirSync(path.join(first.home, '.deckhand'), { recursive: true });
+    fs.writeFileSync(path.join(first.home, '.deckhand', 'state.json'), 'not json');
+    await first.stop();
+    dh = await startDeckhand({ agents: [], env: { HOME: first.home } });
     assert.deepEqual((await get('/api/recents')).json.items, []);
+    await first.dispose();
   });
 
   test('state exposes the decks folder and the sample deck', async () => {
