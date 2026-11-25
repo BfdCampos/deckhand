@@ -1,3 +1,5 @@
+export const tabId = crypto.randomUUID();
+
 export class ApiError extends Error {
   constructor(code, message, status) {
     super(message);
@@ -38,7 +40,6 @@ export const api = {
 };
 
 const listeners = new Set();
-let socket = null;
 let lastSeq = -1;
 let serverId = null;
 
@@ -58,7 +59,7 @@ function dispatch(msg) {
 
 export function connectEvents({ onStatus } = {}) {
   const open = () => {
-    socket = new WebSocket(`ws://${location.host}/ws`);
+    const socket = new WebSocket(`ws://${location.host}/ws`);
     socket.onopen = () => onStatus && onStatus(true);
     socket.onclose = () => { onStatus && onStatus(false); setTimeout(open, 800); };
     socket.onmessage = (ev) => {
@@ -68,10 +69,6 @@ export function connectEvents({ onStatus } = {}) {
     };
   };
   open();
-}
-
-export function sendLegacy(msg) {
-  if (socket && socket.readyState === 1) socket.send(JSON.stringify(msg));
 }
 
 export function normaliseDeck(d) {
