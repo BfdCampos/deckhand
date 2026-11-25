@@ -1,5 +1,7 @@
 import { HttpError } from './security.js';
 
+const OPS_LIMIT = 48 * 1024 * 1024;
+
 const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer open.');
 
 export function deckRoutes({ session, notes }) {
@@ -15,7 +17,10 @@ export function deckRoutes({ session, notes }) {
       if (session.meta()?.deckId === body.deckId) await session.close();
       return {};
     },
-    'POST /api/deck/ops': ({ body }) => session.applyOps(body.deckId, String(body.tabId ?? ''), body.baseRev, body.ops),
+    'POST /api/deck/ops': {
+      limit: OPS_LIMIT,
+      handler: ({ body }) => session.applyOps(body.deckId, String(body.tabId ?? ''), body.baseRev, body.ops),
+    },
     'POST /api/deck/undo': ({ body }) => session.undo(body.deckId, String(body.tabId ?? ''), body.opId),
     'POST /api/deck/redo': ({ body }) => session.redo(body.deckId, String(body.tabId ?? ''), body.opId),
     'GET /api/notes': () => notes.snapshot(),
