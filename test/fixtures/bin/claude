@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+import("../agent-scenario.js").then((m) => m.main("claude")).catch((e) => {
+  process.stderr.write(String(e && e.stack || e) + "\n");
+  process.exit(70);
+});

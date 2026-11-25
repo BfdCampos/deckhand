@@ -1,0 +1,18 @@
+{
+  "description": "Create run that writes a file with an empty body.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "write",
+      "content": "<!DOCTYPE html><html><head><title>Empty</title></head><body></body></html>\n"
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{"type":"thread.started","thread_id":"0199a214-1f00-7c11-9d2e-3b8f0e6a2c11"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"bash -lc 'cat deck.html'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"bash -lc 'cat deck.html'","aggregated_output":"<!DOCTYPE html><html><body><section class=\"slide\"><h1>Hello</h1></section></body></html>\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"bash -lc 'curl -s https://example.com'","aggregated_output":"","exit_code":null,"status":"declined"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"bash -lc 'cat /etc/hosts'","aggregated_output":"","exit_code":null,"status":"declined"}}
+{"type":"item.completed","item":{"id":"item_3","type":"mcp_tool_call","server":"docs","tool":"search","arguments":{"query":"slide layouts"},"result":null,"error":{"message":"user cancelled MCP tool call"},"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_4","type":"web_search","query":"slide deck colour palettes"}}
+{"type":"item.completed","item":{"id":"item_5","type":"file_change","changes":[{"path":"/tmp/deckhand-run-Q7x2/deck.html","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_6","type":"agent_message","text":"Done. The network and the file outside the folder were blocked."}}
+{"type":"turn.completed","usage":{"input_tokens":30112,"cached_input_tokens":28672,"output_tokens":204}}

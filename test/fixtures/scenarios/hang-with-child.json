@@ -1,0 +1,12 @@
+{
+  "description": "Never finishes and spawns a grandchild in its process group; the log records childPid.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "hang": true,
+      "child": true
+    }
+  ]
+}

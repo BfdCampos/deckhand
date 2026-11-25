@@ -8,11 +8,18 @@
   },
   "scripts": {
     "start": "node server.js",
-    "demo": "node server.js samples/sample-deck.html"
+    "demo": "node server.js samples/sample-deck.html",
+    "test": "node --test \"test/unit/**/*.test.js\" && playwright test --project=e2e",
+    "test:unit": "node --test \"test/unit/**/*.test.js\"",
+    "test:e2e": "playwright test --project=e2e",
+    "test:live": "DECKHAND_LIVE=1 playwright test --project=live"
   },
   "dependencies": {
     "chokidar": "^4.0.1",
     "ws": "^8.18.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "1.58.2"
+  }
 }

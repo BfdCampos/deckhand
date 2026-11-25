@@ -1,0 +1,14 @@
+{
+  "description": "Starts, then never finishes. Exits 143 on SIGTERM like the real claude.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking"
+    },
+    {
+      "hang": true
+    }
+  ]
+}

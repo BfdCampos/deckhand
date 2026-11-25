@@ -1,0 +1,71 @@
+{
+  "description": "Read, two blocked tools (Bash and an out-of-folder Read), edit, ticks, text, result: the AC-47 order.",
+  "edit": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "read"
+    },
+    {
+      "emit": "blocked",
+      "tool": "Bash",
+      "text": "ls"
+    },
+    {
+      "emit": "blocked",
+      "tool": "Read",
+      "file": "/etc/hosts"
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true
+    },
+    {
+      "tick": "all"
+    },
+    {
+      "emit": "text",
+      "text": "Done. Two tools were blocked."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ],
+  "create": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "blocked",
+      "tool": "Bash",
+      "text": "ls"
+    },
+    {
+      "emit": "blocked",
+      "tool": "Read",
+      "file": "/etc/hosts"
+    },
+    {
+      "emit": "write",
+      "contentFrom": "two-slide.html"
+    },
+    {
+      "emit": "text",
+      "text": "Done. Two tools were blocked."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}

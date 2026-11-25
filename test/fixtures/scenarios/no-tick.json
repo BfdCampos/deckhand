@@ -1,0 +1,29 @@
+{
+  "description": "Edits the deck but ticks nothing.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "read"
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true
+    },
+    {
+      "emit": "text",
+      "text": "I changed the heading."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}

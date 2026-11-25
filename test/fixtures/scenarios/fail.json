@@ -1,0 +1,29 @@
+{
+  "description": "Reports an error result and exits 1 without changing anything.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking"
+    },
+    {
+      "emit": "read"
+    },
+    {
+      "emit": "text",
+      "text": "I could not apply the notes."
+    },
+    {
+      "stderr": "Error: the model returned an error"
+    },
+    {
+      "emit": "result",
+      "isError": true,
+      "text": "Something went wrong."
+    },
+    {
+      "exit": 1
+    }
+  ]
+}
