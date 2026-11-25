@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { HttpError, notFound, parseRequestPath, readJson, resolveUnder, securityHeaders } from './security.js';
+import { HttpError, forbidden, notFound, parseRequestPath, readJson, resolveUnder, securityHeaders } from './security.js';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -30,6 +30,17 @@ const TYPES = {
 };
 
 const SPA_PATHS = new Set(['/', '/create', '/edit']);
+const DECK_ASSET_EXTS = new Set([
+  '.html', '.htm', '.css', '.js', '.mjs', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg', '.ico',
+  '.woff', '.woff2', '.ttf', '.otf', '.mp4', '.webm', '.mp3', '.wav', '.ogg',
+]);
+
+function deckFileAllowed(rel) {
+  const segments = rel.split('/').filter(Boolean);
+  if (!segments.length || segments.some((s) => s.startsWith('.'))) return false;
+  const name = segments.at(-1).toLowerCase();
+  return DECK_ASSET_EXTS.has(path.extname(name)) || name.endsWith('.deckhand.json');
+}
 
 const typeOf = (file) => TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
 
@@ -57,8 +68,8 @@ export function createHttp({ config, guard, deckDir, deckSource = () => null }) 
       const [method, pattern] = key.split(/\s+/);
       if (!method || !pattern?.startsWith('/api/')) throw new Error(`Bad route key: ${key}`);
       if (routes.some((r) => r.method === method && r.pattern === pattern)) throw new Error(`Route already registered: ${key}`);
-      const { handler, body = method === 'POST' ? 'json' : 'none' } = typeof spec === 'function' ? { handler: spec } : spec;
-      routes.push({ method, pattern, handler, body, ...compile(pattern) });
+      const { handler, body = method === 'POST' ? 'json' : 'none', limit } = typeof spec === 'function' ? { handler: spec } : spec;
+      routes.push({ method, pattern, handler, body, limit, ...compile(pattern) });
     }
   }
 
@@ -71,7 +82,7 @@ export function createHttp({ config, guard, deckDir, deckSource = () => null }) 
       if (route.method !== req.method) continue;
       const params = Object.fromEntries(route.keys.map((k, i) => [k, m[i + 1]]));
       const ctx = { req, res, pathname, query, params, body: undefined };
-      if (route.body === 'json') ctx.body = await readJson(req);
+      if (route.body === 'json') ctx.body = await readJson(req, route.limit);
       const result = await route.handler(ctx);
       if (!res.headersSent) sendJson(res, 200, result ?? {});
       return;
@@ -96,6 +107,7 @@ export function createHttp({ config, guard, deckDir, deckSource = () => null }) 
   async function serveDeckFile(req, res, rel) {
     const dir = deckDir();
     if (!dir) throw notFound('No deck is open.');
+    if (!deckFileAllowed(rel)) throw forbidden('forbidden_path');
     const file = await resolveUnder(dir, rel);
     const ext = path.extname(file).toLowerCase();
     const kind = ext === '.html' || ext === '.htm' ? 'deck' : ext === '.svg' ? 'svg' : 'asset';
