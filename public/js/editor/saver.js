@@ -9,6 +9,16 @@ export const SCRIPT_OWNED = "This text is set by the deck's own script, so Deckh
 const CHANGED_ON_DISK = 'This text changed on disk while you were editing it, so your version wasn\'t saved.';
 const UNREACHABLE = "Couldn't reach Deckhand. Your changes are kept here and will save when it's back.";
 
+const PRESERVED = new Set(['pre', 'pre-wrap', 'pre-line', 'break-spaces']);
+
+function textOp(target, item) {
+  if (!aiIdOf(target) || !target.isConnected) return null;
+  const op = { type: 'setInner', aiId: aiIdOf(target), tag: target.tagName.toLowerCase(), before: item.text.before, after: item.text.after };
+  const view = target.ownerDocument.defaultView;
+  if (view && PRESERVED.has(view.getComputedStyle(target).whiteSpace)) op.whitespace = 'pre';
+  return op;
+}
+
 const transient = (err) => !(err instanceof ApiError) || err.status >= 500 || err.code === 'write_failed' || err.code === 'internal';
 
 export function createSaver(ctx) {
@@ -99,6 +109,11 @@ export function createSaver(ctx) {
       if (item.entry) {
         item.entry.opId = result.opId || item.opId;
         item.entry.settled = true;
+      }
+      if (text && result.changed === false && item.text.after !== item.text.before) {
+        item.rollback?.();
+        dropEntry(item);
+        toast('That change was only spacing the slide collapses, so there was nothing to save.');
       }
       item.onResult?.(result);
       return 'done';
@@ -202,9 +217,7 @@ export function createSaver(ctx) {
       rollback,
       entry,
     };
-    item.build = () => (aiIdOf(target)
-      ? { type: 'setInner', aiId: aiIdOf(target), tag: target.tagName.toLowerCase(), before: item.text.before, after: item.text.after }
-      : null);
+    item.build = () => textOp(target, item);
     enqueue(item);
   }
 
@@ -256,9 +269,7 @@ export function createSaver(ctx) {
   function queueText(target, before, baseRev) {
     const opId = crypto.randomUUID();
     const item = { kind: 'text', el: target, opId, text: { before, after: ctx.innerOf(target) }, baseRev };
-    item.build = () => (aiIdOf(target) && target.isConnected
-      ? { type: 'setInner', aiId: aiIdOf(target), tag: target.tagName.toLowerCase(), before: item.text.before, after: item.text.after }
-      : null);
+    item.build = () => textOp(target, item);
     queue.push(item);
   }
 
