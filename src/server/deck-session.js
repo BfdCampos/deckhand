@@ -15,6 +15,7 @@ const POLL_MS = 250;
 const RECHECK_MS = 150;
 
 const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer open.');
+const readOnly = () => new HttpError(403, 'read_only', 'This deck is read-only.');
 const cannotUndo = () => new HttpError(409, 'cannot_undo', "That can't be undone any more.");
 
 async function writable(p) {
@@ -79,7 +80,8 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     deck.source = loaded.source;
     deck.index = loaded.index;
     deck.anchorsFlushed = loaded.flushed;
-    deck.readOnly = deck.fileReadOnly || !loaded.roundTrips;
+    deck.encodingReadOnly = !loaded.roundTrips;
+    deck.readOnly = deck.fileReadOnly || deck.encodingReadOnly;
     deck.diskHash = sha(buf);
     deck.missing = false;
     deck.rev++;
@@ -88,10 +90,20 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     broadcast({ type: 'deck-changed', deckId: deck.deckId, rev: deck.rev, source });
   }
 
-  async function writeDisk(text) {
-    const buf = Buffer.from(text, 'utf8');
+  async function refreshWritable() {
+    let st = null;
+    try { st = await fsp.stat(deck.path); } catch {}
+    if (st) deck.mode = st.mode & 0o7777;
+    const ok = (!st || (await writable(deck.path))) && (await writable(deck.dir));
+    const was = deck.readOnly;
+    deck.fileReadOnly = !ok;
+    deck.readOnly = deck.fileReadOnly || deck.encodingReadOnly;
+    if (was !== deck.readOnly) broadcast({ type: 'deck', deck: meta() });
+    return !deck.readOnly;
+  }
+
+  async function writeAtomic(buf) {
     const tmp = `${deck.path}.deckhand-tmp`;
-    deck.diskHash = sha(buf);
     try {
       await fsp.writeFile(tmp, buf, { mode: deck.mode });
       await fsp.chmod(tmp, deck.mode);
@@ -100,7 +112,13 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       await fsp.rm(tmp, { force: true }).catch(() => {});
       throw new HttpError(500, 'write_failed', "Couldn't save the deck.");
     }
+    deck.diskHash = sha(buf);
     scheduleRecheck();
+  }
+
+  async function writeDisk(text) {
+    if (!(await refreshWritable())) throw readOnly();
+    await writeAtomic(Buffer.from(text, 'utf8'));
   }
 
   function checkDisk() {
@@ -175,6 +193,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
         name: path.basename(real),
         mode,
         fileReadOnly,
+        encodingReadOnly: !loaded.roundTrips,
         readOnly: fileReadOnly || !loaded.roundTrips,
         source: loaded.source,
         index: loaded.index,
@@ -207,10 +226,9 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     });
   }
 
-  function guard(deckId, { write = true } = {}) {
+  function guard(deckId) {
     if (!deck || deckId !== deck.deckId) throw closed();
     if (locked) throw new HttpError(423, 'run_active', 'The agent is editing this deck.');
-    if (write && deck.readOnly) throw new HttpError(403, 'read_only', 'This deck is read-only.');
     if (deck.missing) throw new HttpError(409, 'deck_missing', "Can't find the deck file.");
   }
 
@@ -227,6 +245,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   function applyOps(deckId, tabId, baseRev, ops) {
     return run(async () => {
       guard(deckId);
+      if (!(await refreshWritable())) throw readOnly();
       if (!Number.isInteger(baseRev)) throw new HttpError(400, 'bad_op', 'Missing baseRev.');
       if (!Array.isArray(ops) || !ops.length || ops.length > 200) throw new HttpError(400, 'bad_op', 'Send between 1 and 200 changes.');
       if (deck.lastExternalRev > baseRev) throw new HttpError(409, 'deck_changed', 'The deck changed on disk. Reloading.');
@@ -297,6 +316,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   function replay(deckId, tabId, opId, direction) {
     return run(async () => {
       guard(deckId);
+      if (!(await refreshWritable())) throw readOnly();
       const entry = journal.find((e) => e.opId === opId && e.tabId === tabId);
       if (!entry) throw cannotUndo();
       const undoing = direction === 'undo';
@@ -331,7 +351,12 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   function flushAnchors() {
     return run(async () => {
       if (!deck || deck.anchorsFlushed || deck.readOnly) return;
-      await writeDisk(deck.source);
+      try {
+        await writeDisk(deck.source);
+      } catch (e) {
+        if (e.code === 'read_only') return;
+        throw e;
+      }
       deck.anchorsFlushed = true;
     });
   }
@@ -340,13 +365,9 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     return run(async () => {
       if (!deck) throw closed();
       const data = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf), 'utf8');
-      const tmp = `${deck.path}.deckhand-tmp`;
-      deck.diskHash = sha(data);
-      await fsp.writeFile(tmp, data, { mode: deck.mode });
-      await fsp.chmod(tmp, deck.mode);
-      await fsp.rename(tmp, deck.path);
+      try { deck.mode = (await fsp.stat(deck.path)).mode & 0o7777; } catch {}
+      await writeAtomic(data);
       adopt(data, source);
-      scheduleRecheck();
     });
   }
 
