@@ -41,6 +41,10 @@ export function removeTempDirs() {
   while (created.length) fs.rmSync(created.pop(), { recursive: true, force: true });
 }
 
+process.on('exit', () => {
+  if (!process.env.DECKHAND_KEEP_TEST_HOME) removeTempDirs();
+});
+
 export function readStream(name) {
   return fs.readFileSync(path.join(STREAMS, name), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
