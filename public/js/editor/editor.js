@@ -74,7 +74,8 @@ export function createEditor({ onHome }) {
   const homeButton = h('button', { type: 'button', class: 'btn btn-ghost btn-sm topbar-home', onclick: goHome }, '← Home');
   const topbar = h('header', { class: 'topbar' },
     homeButton,
-    deckName,
+    h('span', { class: 'topbar-sep', 'aria-hidden': 'true' }),
+    h('span', { class: 'topbar-deck' }, icon('deck', { size: 14 }), deckName),
     h('span', { class: 'grow' }),
     saver.el,
     slots.agent,
