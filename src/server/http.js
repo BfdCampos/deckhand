@@ -84,7 +84,7 @@ export function createHttp({ config, guard, deckDir, deckSource = () => null }) 
       const ctx = { req, res, pathname, query, params, body: undefined };
       if (route.body === 'json') ctx.body = await readJson(req, route.limit);
       const result = await route.handler(ctx);
-      if (!res.headersSent) sendJson(res, 200, result ?? {});
+      if (!res.headersSent) sendJson(res, 200, result === undefined ? {} : result);
       return;
     }
     if (matchedPath) throw new HttpError(405, 'method_not_allowed', 'That method is not allowed here.');

@@ -91,7 +91,8 @@ function createParser({ cwd }) {
       const ok = o.subtype === 'success' && !o.is_error;
       const resultText = typeof o.result === 'string' ? o.result.trim() : '';
       outcome = { ok, text: resultText || null };
-      out.push({ kind: ok ? 'result' : 'error', text: resultText || (ok ? 'Done.' : 'The run failed.') });
+      const repeat = ok && resultText && last?.kind === 'text' && last.text === resultText;
+      if (!repeat) out.push({ kind: ok ? 'result' : 'error', text: resultText || (ok ? 'Done.' : 'The run failed.') });
     }
     if (out.length) last = out.at(-1);
     return out;
