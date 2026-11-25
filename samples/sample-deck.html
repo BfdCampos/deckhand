@@ -1,66 +1,214 @@
 <!DOCTYPE html>
-<html lang="en"><head>
-  <meta charset="UTF-8">
-  <title>Sample deck</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-snap-type: y mandatory; }
-    body { font-family: "Helvetica Neue", Arial, sans-serif; color: #14161c; }
-    .slide { height: 100vh; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: center; padding: 8vh 10vw; position: relative; }
-    .slide h1 { font-size: 64px; line-height: 1.05; letter-spacing: -0.02em; }
-    .slide h2 { font-size: 52px; margin-bottom: 24px; }
-    .slide p { font-size: 24px; line-height: 1.5; max-width: 40ch; color: #3a3f4b; }
-    .slide ul { font-size: 24px; line-height: 1.9; margin: 16px 0 0 24px; color: #3a3f4b; }
-    .s1 { background: linear-gradient(135deg, #2b5cff 0%, #1e46d0 100%); color: #fff; }
-    .s1 p { color: #dbe3ff; }
-    .s2 { background: #f6f7f9; }
-    .s3 { background: #101322; color: #fff; }
-    .s3 p, .s3 li { color: #c9cede; }
-    .kicker { font-size: 18px; text-transform: uppercase; letter-spacing: .18em; opacity: .8; margin-bottom: 16px; }
-    img.logo { width: 160px; margin-top: 32px; }
-    .pink { color: #ff7bc5; }
-    .emoji-bg { position: absolute; inset: 0; display: flex; flex-wrap: wrap; align-content: space-around; justify-content: space-around; padding: 4vh 4vw; font-size: 56px; line-height: 1; opacity: 0.28; pointer-events: none; user-select: none; }
-    .emoji-bg span { display: inline-block; }
-    .emoji-bg span:nth-child(6n+1) { transform: rotate(-18deg); }
-    .emoji-bg span:nth-child(6n+2) { transform: rotate(12deg); }
-    .emoji-bg span:nth-child(6n+3) { transform: rotate(-7deg); }
-    .emoji-bg span:nth-child(6n+4) { transform: rotate(22deg); }
-    .emoji-bg span:nth-child(6n+5) { transform: rotate(-13deg); }
-    .emoji-bg span:nth-child(6n) { transform: rotate(6deg); }
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deckhand: a presentation you and your AI edit together</title>
+<style>
+  :root {
+    --paper: #f6f1ea;
+    --paper-2: #efe7dc;
+    --ink: #1d1b20;
+    --ink-2: #5d5a63;
+    --night: #17161b;
+    --night-2: #b9b4ad;
+    --coral: #ff6a55;
+    --coral-ink: #c23a24;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --u: min(1vw, 1.78vh);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-snap-type: y mandatory; }
+  body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--night); }
+  .slide {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: calc(var(--u) * 7) calc(var(--u) * 8);
+    background: var(--paper);
+  }
+  .slide.dark { background: var(--night); color: #f4efe8; }
+  .kicker {
+    margin: 0 0 calc(var(--u) * 2);
+    font-size: calc(var(--u) * 1.35);
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--coral-ink);
+  }
+  .dark .kicker { color: var(--coral); }
+  h1, h2 { margin: 0; font-family: var(--serif); font-weight: 500; letter-spacing: -0.02em; }
+  h1 { font-size: calc(var(--u) * 6.4); line-height: 1.02; max-width: 15ch; }
+  h2 { font-size: calc(var(--u) * 4.4); line-height: 1.05; max-width: 18ch; }
+  h3 { margin: 0; font-size: calc(var(--u) * 1.6); font-weight: 600; }
+  p { margin: 0; }
+  .lead { margin-top: calc(var(--u) * 2.6); font-size: calc(var(--u) * 1.9); line-height: 1.5; max-width: 38ch; color: var(--ink-2); }
+  .dark .lead { color: var(--night-2); }
+  .rule { width: calc(var(--u) * 6); height: 4px; border-radius: 2px; background: var(--coral); margin-bottom: calc(var(--u) * 3); }
+  .page { position: absolute; right: calc(var(--u) * 8); bottom: calc(var(--u) * 5); font-size: calc(var(--u) * 1.1); letter-spacing: 0.08em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .dark .page { color: #8a857e; }
+
+  /* 1. Title */
+  .title { justify-content: flex-end; padding-bottom: calc(var(--u) * 13); }
+  .title .art { position: absolute; top: calc(var(--u) * 7); right: calc(var(--u) * 8); width: calc(var(--u) * 30); height: auto; }
+  .title .lead { max-width: 44ch; }
+
+  /* 2. Edit by hand */
+  .split { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: calc(var(--u) * 6); align-items: center; }
+  .moves { list-style: none; margin: calc(var(--u) * 3.2) 0 0; padding: 0; display: grid; gap: calc(var(--u) * 1.6); }
+  .moves li {
+    position: relative;
+    padding-left: calc(var(--u) * 3);
+    font-size: calc(var(--u) * 1.8);
+    line-height: 1.4;
+    color: var(--ink);
+  }
+  .moves li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: calc(var(--u) * 1.1);
+    height: calc(var(--u) * 1.1);
+    border-radius: 50%;
+    border: 2px solid var(--coral);
+  }
+  .moves strong { font-weight: 650; }
+  figure { margin: 0; }
+  .boat { display: block; width: 100%; max-width: calc(var(--u) * 40); height: auto; border-radius: calc(var(--u) * 1.6); box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 5) rgba(29, 27, 32, 0.14); }
+  figcaption { margin-top: calc(var(--u) * 1.4); font-size: calc(var(--u) * 1.3); color: var(--ink-2); }
+
+  /* 3. Leave a note */
+  .wide { max-width: 52ch; }
+  .notes { list-style: none; margin: calc(var(--u) * 4) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 2.4); }
+  .notes li {
+    position: relative;
+    padding: calc(var(--u) * 2.4) calc(var(--u) * 2.4) calc(var(--u) * 2.6);
+    border-radius: calc(var(--u) * 1.4);
+    background: #fffdf9;
+    border: 1px solid #e4d9cb;
+    font-family: var(--serif);
+    font-size: calc(var(--u) * 2.1);
+    line-height: 1.3;
+    box-shadow: 0 calc(var(--u) * 0.6) calc(var(--u) * 2) rgba(29, 27, 32, 0.06);
+  }
+  .notes li::before {
+    content: counter(list-item);
+    position: absolute;
+    top: calc(var(--u) * -1.3);
+    left: calc(var(--u) * 2.2);
+    width: calc(var(--u) * 2.6);
+    height: calc(var(--u) * 2.6);
+    border-radius: 50% 50% 50% 4px;
+    background: var(--coral);
+    color: var(--night);
+    font: 600 calc(var(--u) * 1.2) / calc(var(--u) * 2.6) var(--sans);
+    text-align: center;
+  }
+  .scope { display: block; margin-top: calc(var(--u) * 1.4); font-family: var(--sans); font-size: calc(var(--u) * 1.1); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+  .scope.all { color: var(--coral-ink); }
+
+  /* 4. Hand off */
+  .handoff { background: var(--paper-2); }
+  .steps { list-style: none; margin: calc(var(--u) * 4) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 4); counter-reset: step; }
+  .steps li { counter-increment: step; border-top: 2px solid var(--ink); padding-top: calc(var(--u) * 2); font-size: calc(var(--u) * 1.7); line-height: 1.45; color: var(--ink-2); }
+  .steps li::before { content: "0" counter(step); display: block; margin-bottom: calc(var(--u) * 1.4); font-family: var(--serif); font-size: calc(var(--u) * 3.6); line-height: 1; color: var(--coral-ink); }
+  .steps strong { display: block; margin-bottom: calc(var(--u) * 0.6); color: var(--ink); font-weight: 650; }
+
+  /* 5. Still a file */
+  .file { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 6); align-items: center; }
+  .tree { list-style: none; margin: 0; padding: calc(var(--u) * 3); border-radius: calc(var(--u) * 1.6); background: #201f25; border: 1px solid #2e2c33; font-family: var(--mono); font-size: calc(var(--u) * 1.5); line-height: 1.5; display: grid; gap: calc(var(--u) * 1.6); }
+  .tree li { color: #f4efe8; }
+  .tree li span { display: block; font-family: var(--sans); font-size: calc(var(--u) * 1.25); color: #8a857e; }
+  .tree .main { color: var(--coral); }
+  .closing { margin-top: calc(var(--u) * 3); font-size: calc(var(--u) * 1.5); color: var(--night-2); }
 </style>
 </head>
 <body>
-  <section class="slide s1" data-ai-id="dh11">
-    <p class="kicker" data-ai-id="dh1">LIVE DEMO</p>
-    <h1 data-ai-id="dh2"><span class="pink">C</span> p<span class="pink">r</span>e<span class="pink">s</span>e<span class="pink">n</span>t<span class="pink">a</span>t<span class="pink">i</span>o<span class="pink">n</span> y<span class="pink">o</span>u <span class="pink">a</span>n<span class="pink">d</span> y<span class="pink">o</span>u<span class="pink">r</span> A<span class="pink">I</span> e<span class="pink">d</span>i<span class="pink">t</span> t<span class="pink">o</span>g<span class="pink">e</span>t<span class="pink">h</span>e<span class="pink">r</span></h1>
-    <p data-ai-id="dh3">This deck is a plain HTML file. Every change you make here is written straight back to it.</p>
-  </section>
 
-  <section class="slide s2" data-ai-id="dh13">
-    <h2 data-ai-id="dh4">What you can do by hand</h2>
-    <ul>
-      <li data-ai-id="dh5">Double-click any text to edit it</li>
-      <li data-ai-id="dh6">Drag things to move them</li>
-      <li data-ai-id="dh7">Drop or paste an image, then resize it</li>
+<section class="slide dark title" data-ai-id="dh30">
+  <svg class="art" viewBox="0 0 300 220" aria-hidden="true">
+    <rect x="70" y="18" width="210" height="130" rx="14" fill="#24232a" stroke="#3a3840"/>
+    <rect x="44" y="44" width="210" height="130" rx="14" fill="#2b2a31" stroke="#45434c"/>
+    <rect x="18" y="70" width="210" height="130" rx="14" fill="#f6f1ea"/>
+    <rect x="40" y="96" width="110" height="12" rx="6" fill="#1d1b20"/>
+    <rect x="40" y="118" width="150" height="7" rx="3.5" fill="#b9b4ad"/>
+    <rect x="40" y="134" width="128" height="7" rx="3.5" fill="#b9b4ad"/>
+    <rect x="40" y="160" width="54" height="22" rx="11" fill="#ff6a55"/>
+    <path d="M198 84c-10 0-18 8-18 18s18 30 18 30 18-20 18-30-8-18-18-18z" fill="#ff6a55"/>
+    <circle cx="198" cy="102" r="6" fill="#17161b"/>
+  </svg>
+  <p class="kicker" data-ai-id="dh2">Deckhand</p>
+  <h1 data-ai-id="dh1">A presentation you and your AI edit together</h1>
+  <p class="lead" data-ai-id="dh3">This deck is one plain HTML file. Change it by hand, leave notes for your agent, and every edit is written straight back to the file.</p>
+</section>
+
+<section class="slide" data-ai-id="dh31">
+  <div class="split">
+    <div>
+      <p class="kicker" data-ai-id="dh18">Try it here</p>
+      <h2 data-ai-id="dh4">Edit by hand</h2>
+      <ul class="moves">
+        <li data-ai-id="dh5"><strong>Double-click</strong> any text to rewrite it.</li>
+        <li data-ai-id="dh6"><strong>Drag</strong> anything to move it.</li>
+        <li data-ai-id="dh7"><strong>Paste or drop</strong> an image, then pull a corner to resize it.</li>
+        <li data-ai-id="dh8"><strong>Cmd or Ctrl + Z</strong> undoes. Add Shift to redo.</li>
+      </ul>
+    </div>
+    <figure>
+      <img class="boat" data-ai-id="dh9" alt="A small sailing boat on a calm sea at sunrise" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20640%20440%22%3E%20%3Cdefs%3E%3ClinearGradient%20id%3D%22s%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fbe3d6%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23f6f1ea%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%20%3Crect%20width%3D%22640%22%20height%3D%22440%22%20rx%3D%2228%22%20fill%3D%22url%28%23s%29%22%2F%3E%20%3Ccircle%20cx%3D%22452%22%20cy%3D%22170%22%20r%3D%2274%22%20fill%3D%22%23ff6a55%22%2F%3E%20%3Cpath%20d%3D%22M70%20300c40-14%2080-14%20120%200s80%2014%20120%200%2080-14%20120%200%2080%2014%20120%200%22%20fill%3D%22none%22%20stroke%3D%22%231d1b20%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.18%22%2F%3E%20%3Cpath%20d%3D%22M210%20286h196l-30%2042H244z%22%20fill%3D%22%231d1b20%22%2F%3E%20%3Cpath%20d%3D%22M300%20112v170%22%20stroke%3D%22%231d1b20%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%2F%3E%20%3Cpath%20d%3D%22M306%20124l84%20138h-84z%22%20fill%3D%22%23ffffff%22%20stroke%3D%22%231d1b20%22%20stroke-width%3D%225%22%20stroke-linejoin%3D%22round%22%2F%3E%20%3Cpath%20d%3D%22M294%20150l-62%20112h62z%22%20fill%3D%22%23ff6a55%22%20stroke%3D%22%231d1b20%22%20stroke-width%3D%225%22%20stroke-linejoin%3D%22round%22%2F%3E%20%3Cpath%20d%3D%22M40%20352c46-16%2092-16%20138%200s92%2016%20138%200%2092-16%20138%200%2092%2016%20138%200%22%20fill%3D%22none%22%20stroke%3D%22%231d1b20%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.35%22%2F%3E%20%3Cpath%20d%3D%22M90%20396c40-12%2080-12%20120%200s80%2012%20120%200%2080-12%20120%200%2080%2012%20120%200%22%20fill%3D%22none%22%20stroke%3D%22%231d1b20%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.22%22%2F%3E%20%3C%2Fsvg%3E">
+      <figcaption data-ai-id="dh10">Select the picture and pull a corner to resize it.</figcaption>
+    </figure>
+  </div>
+  <p class="page" data-ai-id="dh19">02</p>
+</section>
+
+<section class="slide" data-ai-id="dh32">
+  <p class="kicker" data-ai-id="dh20">Everything else</p>
+  <h2 data-ai-id="dh11">Leave a note</h2>
+  <p class="lead wide" data-ai-id="dh12">Right-click anything and tell the AI what you want, in your own words. Tick ‘Apply to all similar elements’ when a change should reach every heading or every list.</p>
+  <ul class="notes">
+    <li data-ai-id="dh13">Make this title warmer and a little bigger <span class="scope">This heading</span></li>
+    <li data-ai-id="dh14">Turn these points into two columns <span class="scope">This list</span></li>
+    <li data-ai-id="dh15">Set every heading in a serif <span class="scope all">All similar</span></li>
+  </ul>
+  <p class="page" data-ai-id="dh21">03</p>
+</section>
+
+<section class="slide handoff" data-ai-id="dh33">
+  <p class="kicker" data-ai-id="dh22">When you're ready</p>
+  <h2 data-ai-id="dh16">Hand off</h2>
+  <ol class="steps">
+    <li data-ai-id="dh23"><strong>One click</strong>Your agent reads the deck and the work order, then applies every note.</li>
+    <li data-ai-id="dh24"><strong>Watch it work</strong>The deck is read-only while it runs, and each step shows up as it happens.</li>
+    <li data-ai-id="dh25"><strong>Stop or Revert</strong>Stop at any moment. Revert puts the deck and your notes back exactly as they were.</li>
+  </ol>
+  <p class="page" data-ai-id="dh26">04</p>
+</section>
+
+<section class="slide dark" data-ai-id="dh34">
+  <div class="file">
+    <div>
+      <div class="rule" aria-hidden="true"></div>
+      <h2 data-ai-id="dh17">It's still just an HTML file</h2>
+      <p class="lead" data-ai-id="dh27">Open it in any browser to present. Send it to anyone. Your notes live next to it, never inside it.</p>
+      <p class="closing" data-ai-id="dh28">Right-click anything and ask. That's the whole idea.</p>
+    </div>
+    <ul class="tree">
+      <li class="main" data-ai-id="dh35">your-deck.html<span>The deck itself. Slides, styles and text.</span></li>
+      <li data-ai-id="dh36">your-deck.deckhand.json<span>Your notes and layout tweaks.</span></li>
+      <li data-ai-id="dh37">your-deck.deckhand.md<span>The work order your agent reads.</span></li>
+      <li data-ai-id="dh38">deckhand-assets/<span>Images you paste or drop in.</span></li>
     </ul>
-    <img class="logo" alt="placeholder logo" data-ai-id="dh8" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj48cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgcng9IjI0IiBmaWxsPSIjZmY0ZjQwIi8+PHRleHQgeD0iODAiIHk9IjEwNSIgZm9udC1zaXplPSI4NCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9ImJvbGQiPkI8L3RleHQ+PC9zdmc+" style="position: absolute; right: 10vw; bottom: 8vh; margin-top: 0;">
-  </section>
+  </div>
+</section>
 
-  <section class="slide s2" data-ai-id="dh15" style="filter: invert(1);">
-    <h2 data-ai-id="dh16">What you can do by hand</h2>
-    <ul>
-      <li data-ai-id="dh17">Double-click any text to edit it</li>
-      <li data-ai-id="dh18">Drag things to move them</li>
-      <li data-ai-id="dh19">Drop or paste an image, then resize it</li>
-    </ul>
-    <img class="logo" alt="placeholder logo" data-ai-id="dh20" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iMTYwIj48cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgcng9IjI0IiBmaWxsPSIjZmY0ZjQwIi8+PHRleHQgeD0iODAiIHk9IjEwNSIgZm9udC1zaXplPSI4NCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC13ZWlnaHQ9ImJvbGQiPkI8L3RleHQ+PC9zdmc+" style="position: absolute; right: 10vw; bottom: 8vh; margin-top: 0;">
-  </section>
-
-  <section class="slide s3" data-ai-id="dh14">
-    <div data-ai-id="dh21" aria-hidden="true" class="emoji-bg"><span>🚀</span><span>✨</span><span>🎉</span><span>📝</span><span>🖱️</span><span>🤖</span><span>💡</span><span>🎨</span><span>🖼️</span><span>📄</span><span>🔥</span><span>⭐️</span><span>🪄</span><span>🧩</span><span>💬</span><span>📌</span><span>🎯</span><span>🛠️</span><span>🧠</span><span>📎</span><span>🌈</span><span>💫</span><span>🖊️</span><span>📐</span><span>🎬</span><span>🪄</span><span>🔧</span><span>📊</span><span>🧭</span><span>🚦</span><span>🎈</span><span>🪅</span><span>🧵</span><span>📷</span><span>🗂️</span><span>🔮</span><span>💻</span><span>🖇️</span><span>🎁</span><span>🚢</span><span>✅</span><span>⚙️</span><span>🌟</span><span>📈</span><span>🧪</span><span>🔗</span><span>🖌️</span><span>💥</span><span>🪧</span><span>🗒️</span><span>🎀</span><span>🧱</span><span>🌀</span><span>📬</span><span>🕹️</span><span>🪁</span><span>🎇</span></div>
-    <h2 data-ai-id="dh9" style="position: relative; z-index: 1;">Everything else is a note</h2>
-    <p data-ai-id="dh10" style="position: relative; z-index: 1;">Right-click anything and tell the AI what you want. When you're done, hand off and your agent applies the lot.</p>
-  </section>
-
-
-</body></html>
+</body>
+</html>
