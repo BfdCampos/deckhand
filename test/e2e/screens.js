@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect } from './fixtures.js';
 import { makeDeck, openAsRecent, openHome, input, createBtn } from './home-helpers.js';
-import { addNotes, openEditor as openRunsEditor } from './runs-helpers.js';
+import { addNotes, postApi, openEditor as openRunsEditor } from './runs-helpers.js';
 
 const SAMPLE = 'samples/sample-deck.html';
 
@@ -36,6 +36,25 @@ export const SCREENS = [
     name: 'home-no-agent',
     options: { agents: [] },
     go: openHome,
+  },
+  {
+    name: 'home-continue',
+    options: { agents: ['claude'], deck: SAMPLE },
+    async go(page, deckhand) {
+      await openHome(page, deckhand);
+      await expect(page.locator('.home-continue')).toContainText('Continue editing sample-deck.html');
+    },
+  },
+  {
+    name: 'home-run-paused',
+    options: { agents: ['claude'], deck: SAMPLE },
+    async go(page, deckhand) {
+      await addNotes(deckhand, [{ text: 'Take your time [[fake:hang]]', targetTag: 'h1', aiId: 'dh1', slide: 1 }]);
+      await postApi(deckhand, '/api/runs', { kind: 'edit', scope: 'all' });
+      await openHome(page, deckhand);
+      await expect(page.locator('.home-running')).toContainText('is editing sample-deck.html');
+      await expect(page.locator('.open-busy')).toBeVisible();
+    },
   },
   {
     name: 'browse',
