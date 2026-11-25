@@ -30,23 +30,22 @@ export function createEditor({ onHome }) {
     footer: h('div', { class: 'sb-foot' }),
   };
 
-  const root = h('div', { class: 'editor', hidden: true },
-    stage,
-    h('aside', { class: 'sidebar' },
-      h('div', { class: 'sb-head' },
-        h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
-        conn,
-      ),
-      h('div', { class: 'sb-file' },
-        filePath,
-        h('button', { type: 'button', class: 'link link-btn', title: 'Open a different presentation', onclick: () => onHome() }, 'Open another deck →'),
-      ),
-      slots.tools,
-      slots.notes,
-      slots.activity,
-      slots.footer,
+  const sidebar = h('aside', { class: 'sidebar' },
+    h('div', { class: 'sb-head' },
+      h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
+      conn,
     ),
+    h('div', { class: 'sb-file' },
+      filePath,
+      h('button', { type: 'button', class: 'link link-btn', title: 'Open a different presentation', onclick: () => onHome() }, 'Open another deck →'),
+    ),
+    slots.tools,
+    slots.notes,
+    slots.activity,
+    slots.footer,
   );
+
+  const root = h('div', { class: 'editor', hidden: true }, stage, sidebar);
 
   let saveTimer = null;
 
@@ -65,6 +64,26 @@ export function createEditor({ onHome }) {
     scheduleSave,
     reload,
   };
+
+  let elsewhere = null;
+  const elsewhereText = h('p', { class: 'editor-elsewhere-text' });
+  const switchBtn = h('button', { type: 'button', class: 'btn btn-primary' }, 'Switch to it');
+  const homeBtn = h('button', { type: 'button', class: 'btn btn-secondary' }, icon('home'), 'Go Home');
+  const notice = h('div', { class: 'editor-elsewhere', role: 'alertdialog', 'aria-labelledby': 'editor-elsewhere-text', hidden: true },
+    h('div', { class: 'editor-elsewhere-card' },
+      h('span', { class: 'editor-elsewhere-icon' }, icon('alert')),
+      elsewhereText,
+      h('p', { class: 't-small text-muted' }, "Edits here are paused so nothing is saved into the wrong file."),
+      h('div', { class: 'editor-elsewhere-actions' }, homeBtn, switchBtn)));
+  elsewhereText.id = 'editor-elsewhere-text';
+  root.append(notice);
+
+  function clearElsewhere() {
+    elsewhere = null;
+    stage.inert = false;
+    sidebar.inert = false;
+    notice.hidden = true;
+  }
 
   bindFrame(iframe);
   ctx.manual = createManual(ctx);
@@ -85,7 +104,7 @@ export function createEditor({ onHome }) {
   store.subscribe(showConn);
   showConn(store.get());
 
-  onEvent((m) => { if (m.type === 'deck-changed' && ctx.deck) reload(); });
+  onEvent((m) => { if (m.type === 'deck-changed' && ctx.deck && !root.hidden) reload(); });
 
   function scheduleSave() {
     clearTimeout(saveTimer);
@@ -94,16 +113,19 @@ export function createEditor({ onHome }) {
 
   function commit() {
     clearTimeout(saveTimer);
-    if (!doc()) return;
+    if (!doc() || elsewhere) return;
     sendLegacy({ type: 'save-html', html: serializeDeck() });
     ctx.notesApi.persist();
   }
 
   function load() {
-    iframe.src = ctx.deck.url + '?t=' + Date.now();
+    const url = ctx.deck.url + '?t=' + Date.now();
+    if (iframe.contentWindow) iframe.contentWindow.location.replace(url);
+    else iframe.src = url;
   }
 
   function reload() {
+    if (elsewhere) return;
     if (ctx.editing) { ctx.pendingReload = true; return; }
     load();
     ctx.notesApi.load();
@@ -111,7 +133,7 @@ export function createEditor({ onHome }) {
 
   function enhance() {
     const d = doc();
-    if (!d) return;
+    if (!d || root.hidden || d.URL === 'about:blank') return;
     injectAffordanceStyle(d);
     attachEscape(d);
     ensureIds(d);
@@ -127,7 +149,20 @@ export function createEditor({ onHome }) {
     ctx,
     stage,
     get visible() { return !root.hidden; },
+    get deck() { return ctx.deck; },
+    showElsewhere(deck, { onSwitch, onHome }) {
+      clearTimeout(saveTimer);
+      elsewhere = deck;
+      stage.inert = true;
+      sidebar.inert = true;
+      elsewhereText.textContent = `Another tab opened ${deck.name || deck.path.split('/').pop()}.`;
+      switchBtn.onclick = onSwitch;
+      homeBtn.onclick = onHome;
+      notice.hidden = false;
+      switchBtn.focus();
+    },
     open(deck) {
+      clearElsewhere();
       ctx.deck = deck;
       filePath.textContent = deck.path;
       root.hidden = false;
@@ -135,7 +170,9 @@ export function createEditor({ onHome }) {
       load();
     },
     hide() {
+      clearElsewhere();
       root.hidden = true;
+      iframe.contentWindow?.location.replace('about:blank');
       setToastHost(null);
     },
   };

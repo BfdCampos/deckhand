@@ -1,5 +1,6 @@
 import { api, connectEvents, onEvent, deckFromState, normaliseDeck } from './api.js';
 import { store } from './store.js';
+import { confirmDeepLink } from './deep-link.js';
 import { createHome } from './home/home.js';
 import { createEditor } from './editor/editor.js';
 
@@ -25,9 +26,26 @@ function showHome({ push = false } = {}) {
   home.show(deck ? deck.dir : '');
 }
 
+let pendingOpen = null;
+
 async function openDeck(path, { push = true } = {}) {
-  const deck = normaliseDeck(await api.post('/api/open', { path }));
-  showEditor(deck, { push });
+  pendingOpen = path;
+  try {
+    const deck = normaliseDeck(await api.post('/api/open', { path }));
+    showEditor(deck, { push });
+  } finally {
+    pendingOpen = null;
+  }
+}
+
+function askToOpen(wanted) {
+  editor.hide();
+  const deck = store.get().deck;
+  home.show(deck ? deck.dir : '');
+  confirmDeepLink(wanted, {
+    onOpen: () => openDeck(wanted, { push: false }).catch((err) => { showHome(); home.showError(err.message); }),
+    onCancel: () => showHome(),
+  });
 }
 
 async function route({ boot = false } = {}) {
@@ -35,12 +53,7 @@ async function route({ boot = false } = {}) {
   const current = store.get().deck;
   if (wanted) {
     if (current && current.path === wanted) return showEditor(current, { push: false });
-    try {
-      await openDeck(wanted, { push: false });
-    } catch (err) {
-      showHome();
-      home.showError(err.message);
-    }
+    askToOpen(wanted);
     return;
   }
   if (boot && current) return showEditor(current, { push: false });
@@ -66,7 +79,16 @@ onEvent((m) => {
   const current = store.get().deck;
   const changed = !current || current.path !== deck.path;
   store.set({ deck });
-  if (editor.visible && (changed || reconnected)) showEditor(deck, { push: false });
+  if (!editor.visible || (!changed && !reconnected)) return;
+  const showing = editor.deck;
+  if (showing && showing.path !== deck.path && deck.path !== pendingOpen) {
+    editor.showElsewhere(deck, {
+      onSwitch: () => showEditor(deck, { push: false }),
+      onHome: () => showHome({ push: true }),
+    });
+    return;
+  }
+  showEditor(deck, { push: false });
 });
 
 window.addEventListener('popstate', () => route());
