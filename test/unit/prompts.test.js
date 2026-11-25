@@ -46,3 +46,14 @@ test('file names are quoted and stripped of control characters', () => {
   assert.ok(guardrail({ kind: 'edit', deck: 'a"b.html', workOrder: 'w.md' }).includes('"a\\"b.html"'));
   assert.doesNotMatch(guardrail({ kind: 'create', target: 'a\nb.html' }), /\n/);
 });
+
+test('every prompt asks for British English and no em-dashes', () => {
+  const line = 'Write in British English and never use em-dashes (use commas, colons or full stops instead).';
+  const prompts = [
+    createPrompt({ name: 'tea.html', description: 'A deck about tea' }),
+    guardrail({ kind: 'edit', deck: 'deck.html', workOrder: 'deck.deckhand.md' }),
+    guardrail({ kind: 'create', target: 'tea.html' }),
+    editPrompt({ deck: 'deck.html', workOrder: 'deck.deckhand.md', notes: [] }),
+  ];
+  for (const p of prompts) assert.ok(p.includes(line), p);
+});
