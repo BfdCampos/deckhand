@@ -8,10 +8,10 @@ import { REPO } from '../helpers/fakes.js';
 // Files that break a rule today and are being fixed by their owners in PR1. Each entry must go once
 // its file is fixed or deleted; the test prints a diagnostic for entries that no longer need it.
 const TEMPORARY_ALLOWLIST = {
-  emDash: ['server.js', 'public/app.js', 'public/index.html'],
-  emoji: ['public/app.js', 'public/index.html'],
+  emDash: [],
+  emoji: [],
   spelling: [],
-  innerHTML: ['public/app.js'],
+  innerHTML: [],
 };
 
 const BINARY = /\.(png|jpe?g|gif|webp|ico|svgz|woff2?|ttf|otf|eot|pdf|zip|gz|tgz)$/i;
