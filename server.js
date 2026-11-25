@@ -151,9 +151,8 @@ if (config.deckPath) {
 
 await detecting;
 const url = `http://127.0.0.1:${port}`;
-console.log(`\n  Deckhand is running at ${url}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
+const bound = session.meta();
+const landing = bound ? `${url}/edit?deck=${encodeURIComponent(bound.path)}` : url;
+console.log(`\n  Deckhand is running at ${landing}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
 
-if (config.open) {
-  const deck = session.meta();
-  openBrowser(deck ? `${url}/edit?deck=${encodeURIComponent(deck.path)}` : `${url}/`);
-}
+if (config.open) openBrowser(bound ? landing : `${url}/`);
