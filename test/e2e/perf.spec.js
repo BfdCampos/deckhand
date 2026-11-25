@@ -3,6 +3,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { test, expect } from './fixtures.js';
 import { tempDir } from '../helpers/fakes.js';
+import { editUrl } from './editor-helpers.js';
 
 const SLIDES = 100;
 
@@ -57,7 +58,7 @@ test('the 100-slide, 20 MB deck really is that big', () => {
 
 test('the editor is ready within 3 s on a 100-slide, 20 MB deck', async ({ page, deckhand }, testInfo) => {
   const t0 = Date.now();
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await expect(page.locator('body[data-ready]')).toBeAttached({ timeout: 15_000 });
   const ms = Date.now() - t0;
   testInfo.annotations.push({ type: 'editor ready', description: `${ms} ms` });
@@ -65,7 +66,7 @@ test('the editor is ready within 3 s on a 100-slide, 20 MB deck', async ({ page,
 });
 
 test('typing in a heading has no visible lag on the big deck', async ({ page, deckhand }, testInfo) => {
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await expect(page.locator('body[data-ready]')).toBeAttached({ timeout: 15_000 });
   const heading = page.frameLocator('iframe#deck').locator('h2').first();
   await heading.dblclick();
