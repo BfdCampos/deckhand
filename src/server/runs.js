@@ -465,6 +465,7 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     const noteId = query.get('scope') === 'note' ? query.get('noteId') : null;
     const open = notes.list().filter((n) => n.status === 'open' && (!noteId || n.id === noteId));
     if (noteId && !open.length) throw new HttpError(404, 'no_note', 'That note no longer exists.');
+    await session.flushAnchors();
     const guard = guardrail({ kind: 'edit', deck: meta.path, workOrder: meta.workOrderPath });
     return {
       prompt: `${guard}\n\n${editPrompt({ deck: meta.path, workOrder: meta.workOrderPath, notes: open, noteId })}`,
