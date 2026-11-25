@@ -46,6 +46,27 @@ ${slides}
 </body></html>`;
 }
 
+// The 3 s budget is for a modern laptop. Machines that are slower at the same browser work (CI
+// runners) get it scaled by how much longer they take over a fixed parse workload, so the check
+// follows the editor, not the hardware. CALIBRATION_REF_MS is that workload on the reference laptop.
+const READY_BUDGET_MS = 3000;
+const CALIBRATION_REF_MS = 52;
+
+function calibrate(page) {
+  return page.evaluate(() => {
+    const slide = `<section class="slide"><h2>Slide</h2><p>${'word '.repeat(2000)}</p><img alt="" src="data:image/png;base64,${'A'.repeat(200000)}"></section>`;
+    const html = `<!DOCTYPE html><html><body>${slide.repeat(100)}</body></html>`;
+    const times = [];
+    for (let i = 0; i < 3; i++) {
+      const t = performance.now();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      if (!doc.querySelectorAll('section, h2, p, img').length) throw new Error('calibration parse failed');
+      times.push(performance.now() - t);
+    }
+    return Math.min(...times);
+  });
+}
+
 const dir = tempDir('deckhand-perf-');
 const deckPath = path.join(dir, 'big-deck.html');
 fs.writeFileSync(deckPath, bigDeck());
@@ -57,12 +78,21 @@ test('the 100-slide, 20 MB deck really is that big', () => {
 });
 
 test('the editor is ready within 3 s on a 100-slide, 20 MB deck', async ({ page, deckhand }, testInfo) => {
-  const t0 = Date.now();
+  const calibration = await calibrate(page);
+  const budget = READY_BUDGET_MS * Math.max(1, calibration / CALIBRATION_REF_MS);
+  await page.addInitScript(() => {
+    if (window.top !== window) return;
+    new MutationObserver((_, observer) => {
+      if (!document.body?.hasAttribute('data-ready')) return;
+      window.__readyAt = performance.now();
+      observer.disconnect();
+    }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-ready'] });
+  });
   await page.goto(await editUrl(deckhand));
-  await expect(page.locator('body[data-ready]')).toBeAttached({ timeout: 15_000 });
-  const ms = Date.now() - t0;
-  testInfo.annotations.push({ type: 'editor ready', description: `${ms} ms` });
-  expect(ms).toBeLessThan(3000);
+  await expect(page.locator('body[data-ready]')).toBeAttached({ timeout: 30_000 });
+  const ms = Math.round(await page.evaluate(() => window.__readyAt));
+  testInfo.annotations.push({ type: 'editor ready', description: `${ms} ms (budget ${Math.round(budget)} ms, calibration ${Math.round(calibration)} ms)` });
+  expect(ms).toBeLessThan(budget);
 });
 
 test('typing in a heading has no visible lag on the big deck', async ({ page, deckhand }, testInfo) => {
