@@ -24,8 +24,11 @@
       "tick": "all"
     },
     {
-      "emit": "result",
+      "emit": "text",
       "text": "Done."
+    },
+    {
+      "emit": "result"
     },
     {
       "exit": 0
