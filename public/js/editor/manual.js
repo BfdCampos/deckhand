@@ -132,20 +132,97 @@ export function createManual(ctx) {
     return /^\s*<br\s*\/?>\s*$/i.test(html) ? '' : html;
   }
 
+  function currentRange() {
+    const sel = win().getSelection();
+    return sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  }
+
+  const caretHolders = new Set();
+
+  function setCaret(node, offset) {
+    const range = doc().createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    const sel = win().getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function insertNodes(nodes) {
+    const range = currentRange();
+    if (!range || !nodes.length) return;
+    range.deleteContents();
+    const frag = doc().createDocumentFragment();
+    for (const n of nodes) frag.appendChild(n);
+    const last = nodes[nodes.length - 1];
+    range.insertNode(frag);
+    if (last.nodeType === Node.TEXT_NODE) {
+      setCaret(last, last.data.length);
+    } else {
+      const holder = doc().createTextNode('\u200B');
+      caretHolders.add(holder);
+      last.after(holder);
+      setCaret(holder, 1);
+    }
+    ctx.editing?.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function releaseCaretHolders() {
+    for (const holder of caretHolders) {
+      if (holder.isConnected) {
+        const data = holder.data.replace('\u200B', '');
+        if (data) holder.data = data;
+        else holder.remove();
+      }
+    }
+    caretHolders.clear();
+  }
+
+  function insertLineBreak() {
+    insertNodes([doc().createElement('br')]);
+  }
+
   function insertPlainText(text) {
     const d = doc();
-    const lines = text.replace(/\r\n?/g, '\n').split('\n');
-    lines.forEach((line, i) => {
-      if (i) d.execCommand('insertLineBreak');
-      if (line) d.execCommand('insertText', false, line);
+    const nodes = [];
+    text.replace(/\r\n?/g, '\n').split('\n').forEach((line, i) => {
+      if (i) nodes.push(d.createElement('br'));
+      if (line) nodes.push(d.createTextNode(line));
     });
+    insertNodes(nodes);
   }
 
   function onEditKeyDown(e) {
     if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
-    if (e.shiftKey) doc().execCommand('insertLineBreak');
+    if (e.shiftKey) insertLineBreak();
     else e.currentTarget.blur();
+  }
+
+  function onEditBeforeInput(e) {
+    if (e.inputType.startsWith('format')) { e.preventDefault(); return; }
+    if (e.inputType !== 'insertText' || !e.data) return;
+    const range = currentRange();
+    if (!range) return;
+    const start = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+    const link = start && start.closest('a');
+    if (!link || !e.currentTarget.contains(link)) return;
+    e.preventDefault();
+    range.deleteContents();
+    let node = range.startContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node.insertData(range.startOffset, e.data);
+      const at = doc().createRange();
+      at.setStart(node, range.startOffset + e.data.length);
+      at.collapse(true);
+      win().getSelection().removeAllRanges();
+      win().getSelection().addRange(at);
+    } else {
+      const text = doc().createTextNode(e.data);
+      range.insertNode(text);
+      setCaret(text, text.data.length);
+    }
+    e.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function onEditPaste(e) {
@@ -177,6 +254,7 @@ export function createManual(ctx) {
     t.setAttribute('contenteditable', 'true');
     t.removeAttribute('data-dh-hover');
     t.addEventListener('keydown', onEditKeyDown);
+    t.addEventListener('beforeinput', onEditBeforeInput);
     t.addEventListener('paste', onEditPaste);
     t.addEventListener('drop', onEditDrop);
     t.focus();
@@ -186,10 +264,12 @@ export function createManual(ctx) {
       popEscape();
       t.removeEventListener('blur', onBlur);
       t.removeEventListener('keydown', onEditKeyDown);
+      t.removeEventListener('beforeinput', onEditBeforeInput);
       t.removeEventListener('paste', onEditPaste);
       t.removeEventListener('drop', onEditDrop);
       t.removeAttribute('contenteditable');
       if (ctx.editing === t) ctx.editing = null;
+      releaseCaretHolders();
       const after = innerOf(t);
       if (after !== cleanInner(t)) setInnerHtml(t, after);
       if (after !== before && !ctx.canFinish()) {
