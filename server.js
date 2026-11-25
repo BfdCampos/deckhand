@@ -10,7 +10,8 @@ import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
 import { deckRoutes } from './src/server/deck-routes.js';
-import { createLegacyRuns } from './src/server/legacy-runs.js';
+import { createAgents } from './src/server/agents/index.js';
+import { createRuns } from './src/server/runs.js';
 
 let config;
 try {
@@ -30,7 +31,8 @@ const store = createStore({ stateDir: config.stateDir });
 const notes = createNotes({ hub: hubProxy });
 const session = createDeckSession({ hub: hubProxy, store, notes, home: config.home });
 const assets = createAssets({ session });
-const runs = createLegacyRuns({ session, notes, broadcast, config });
+const agents = createAgents({ config, store, broadcast });
+const runs = createRuns({ config, session, notes, agents, store, broadcast });
 
 let port = null;
 const guard = createGuard({ getPort: () => port });
@@ -48,7 +50,7 @@ function legacyFields(meta) {
 
 function stateSnapshot() {
   const meta = session.meta();
-  return { ...legacyFields(meta), deck: meta, serverId };
+  return { ...legacyFields(meta), deck: meta, agents: agents.payload(), run: runs.state(), decksDir: config.decksDir, serverId };
 }
 
 app.registerRoutes({
@@ -57,6 +59,7 @@ app.registerRoutes({
   'POST /api/open': ({ body }) => session.open(body.path),
   ...deckRoutes({ session, notes }),
   ...assets.routes,
+  ...agents.routes({ isBusy: runs.isBusy }),
   ...runs.routes,
 });
 
@@ -67,6 +70,8 @@ hub = createHub({
     { type: 'hello', serverId, state: stateSnapshot() },
     { type: 'deck', deck: session.meta() },
     { type: 'notes', ...notes.snapshot() },
+    { type: 'agents', agents: agents.payload() },
+    ...(runs.state() ? [{ type: 'run', run: runs.state() }] : []),
   ],
 });
 
@@ -116,8 +121,10 @@ process.on('uncaughtException', (e) => {
   shutdown(1);
 });
 
+let detecting;
 try {
   await store.load();
+  detecting = agents.detect().catch((e) => console.error(`[deckhand] agent detection failed: ${e.message}`));
   port = await listen(app.server, config.port);
 } catch (e) {
   console.error(e.message);
@@ -132,5 +139,5 @@ if (config.deckPath) {
   }
 }
 
-const agent = runs.claudePath() ? 'Claude Code' : 'none found';
-console.log(`\n  Deckhand is running at http://127.0.0.1:${port}\n  Agent: ${agent}\n  Press Ctrl+C to stop.\n`);
+await detecting;
+console.log(`\n  Deckhand is running at http://127.0.0.1:${port}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);

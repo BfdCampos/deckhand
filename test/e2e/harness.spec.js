@@ -43,3 +43,20 @@ test.describe('console guard', () => {
     });
   });
 });
+
+test.describe('expected API errors', () => {
+  test.use({ expectedApiErrors: [{ path: '/api/runs/run_nope/stop', status: 409 }] });
+
+  test('a declared API 4xx does not fail the test', async ({ page, deckhand }) => {
+    await page.goto(deckhand.url + '/');
+    const status = await page.evaluate(() => fetch('/api/runs/run_nope/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.status));
+    expect(status).toBe(409);
+  });
+
+  test('an undeclared API 4xx still fails it', async ({ page, deckhand }) => {
+    test.fail();
+    await page.goto(deckhand.url + '/');
+    await page.evaluate(() => fetch('/api/runs/run_nope/revert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }));
+    await page.waitForTimeout(100);
+  });
+});

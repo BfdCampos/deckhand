@@ -6,6 +6,9 @@
   "bin": {
     "deckhand": "server.js"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "demo": "node server.js samples/sample-deck.html",

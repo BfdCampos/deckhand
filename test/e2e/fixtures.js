@@ -8,6 +8,7 @@ const HARNESS_NOISE = /^Blocked script execution in 'about:srcdoc' because the d
 export const test = base.extend({
   deckhandOptions: [{}, { option: true }],
   allowedConsoleErrors: [[], { option: true }],
+  expectedApiErrors: [[], { option: true }],
 
   deckhand: async ({ deckhandOptions, context }, use, testInfo) => {
     const dh = await startDeckhand(deckhandOptions);
@@ -25,13 +26,20 @@ export const test = base.extend({
     }
   },
 
-  failOnConsoleErrors: [async ({ context, allowedConsoleErrors }, use) => {
+  failOnConsoleErrors: [async ({ context, allowedConsoleErrors, expectedApiErrors }, use) => {
     const problems = [];
+    const expectedApi = (msg) => {
+      const m = /^Failed to load resource: the server responded with a status of (\d{3})/.exec(msg.text());
+      if (!m) return false;
+      const { pathname } = new URL(msg.location().url || 'http://x/');
+      return expectedApiErrors.some(({ path: p, status }) => Number(m[1]) === status
+        && pathname.startsWith('/api/') && (p instanceof RegExp ? p.test(pathname) : pathname === p));
+    };
     const matches = (text) => HARNESS_NOISE.test(text) || allowedConsoleErrors.some((p) => (p instanceof RegExp ? p.test(text) : text.includes(p)));
     const allowed = (...texts) => texts.some((t) => t && matches(t));
     const watch = (page) => {
       page.on('console', (msg) => {
-        if (msg.type() === 'error' && !allowed(msg.text(), msg.location().url)) problems.push(`console.error: ${msg.text()} (${msg.location().url})`);
+        if (msg.type() === 'error' && !expectedApi(msg) && !allowed(msg.text(), msg.location().url)) problems.push(`console.error: ${msg.text()} (${msg.location().url})`);
       });
       page.on('pageerror', (err) => {
         if (!allowed(err.message)) problems.push(`pageerror: ${err.message}`);
