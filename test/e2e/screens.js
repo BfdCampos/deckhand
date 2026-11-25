@@ -60,7 +60,7 @@ export const SCREENS = [
     name: 'generation-failed',
     options: { agents: ['claude'] },
     async go(page, deckhand) {
-      await startCreate(page, deckhand, 'A calm deck about tea for the team [[fake:fail]]');
+      await startCreate(page, deckhand, 'A calm deck about tea for the team [[fake:fail-mid-run]]');
       await expect(page.locator('.gen-failure')).toBeVisible({ timeout: 10_000 });
     },
   },
