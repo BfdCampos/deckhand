@@ -7,7 +7,7 @@ import { openModal } from '../ui/modal.js';
 import { openMenu } from '../ui/popover.js';
 import { createActivityCard } from '../ui/activity.js';
 import { createAgentChip, setAgents, selectAgent, foundAgents, selectedAgent } from '../ui/agent-chip.js';
-import { ensureStylesheet, formatElapsed } from '../ui/util.js';
+import { formatElapsed } from '../ui/util.js';
 
 const ERROR_COPY = {
   busy: 'Busy with another run. Try again when it finishes.',
@@ -17,6 +17,9 @@ const ERROR_COPY = {
   run_active: 'Busy with another run. Try again when it finishes.',
   cannot_revert: "This run can't be reverted any more.",
   not_running: 'That run has already finished.',
+  deck_closed: 'This deck was closed in another tab.',
+  deck_missing: "Can't find the deck file any more.",
+  no_note: 'That note no longer exists.',
 };
 const errorText = (err) => ERROR_COPY[err?.code] || err?.message || 'Something went wrong.';
 const MAX_ERROR = 400;
@@ -35,7 +38,6 @@ function middleTruncate(text, max = 64) {
 }
 
 export function mountRuns(ctx) {
-  ensureStylesheet('/css/runs.css');
 
   const card = createActivityCard();
   const activitySlot = ctx.slots.activity;
@@ -44,7 +46,6 @@ export function mountRuns(ctx) {
   activitySlot.append(h('div', { class: 'runs-activity-title t-label' }, 'Activity'), card.el);
 
   const chip = createAgentChip();
-  const meta = h('span', { class: 'runs-meta t-meta truncate' });
   const group = h('div', { class: 'btn-group runs-actions' });
 
   const handoffBtn = h('button', { type: 'button', class: 'btn btn-primary btn-lg runs-main runs-handoff', onclick: handoff });
@@ -63,13 +64,8 @@ export function mountRuns(ctx) {
   }, icon('chevron-down'));
 
   ctx.slots.footer.classList.add('runs-footer');
-  ctx.slots.footer.append(h('div', { class: 'runs-foot' },
-    h('div', { class: 'runs-foot-row' }, chip.el, meta),
-    group));
-
-  const veil = h('div', { class: 'runs-veil', hidden: true },
-    h('div', { class: 'runs-pill', role: 'status' }, h('span', { class: 'dot dot-working' }), h('span', { class: 'runs-pill-text' })));
-  (ctx.iframe?.parentElement || ctx.root).append(veil);
+  ctx.slots.agent.append(chip.el);
+  ctx.slots.footer.append(h('div', { class: 'runs-foot' }, group));
 
   let run = null;
   let lines = new Map();
@@ -90,10 +86,7 @@ export function mountRuns(ctx) {
   const agentName = () => selectedAgent(store.get().agents)?.name;
   const openNotes = () => (ctx.notes || []).filter((n) => (n.status || 'open') !== 'done');
 
-  function tweakCount() {
-    if (ctx.layoutTweaks) return Object.keys(ctx.layoutTweaks).length;
-    try { return ctx.notesApi?.computeTweaks?.().length || 0; } catch { return 0; }
-  }
+  const tweakCount = () => Object.keys(ctx.layoutTweaks || {}).length;
 
   function noteLabel(id) {
     const i = (ctx.notes || []).findIndex((n) => n.id === id);
@@ -107,18 +100,10 @@ export function mountRuns(ctx) {
   }
 
   function lock(on) {
-    if (on === locked) {
-      if (on) veil.querySelector('.runs-pill-text').textContent = lockText();
-      return;
-    }
+    if (on === locked && !on) return;
     locked = on;
-    if (ctx.setLocked) {
-      if (on) ctx.setLocked(true, lockText());
-      else ctx.setLocked(false);
-      return;
-    }
-    veil.querySelector('.runs-pill-text').textContent = lockText();
-    veil.hidden = !on;
+    if (on) ctx.setLocked(true, lockText());
+    else ctx.setLocked(false);
   }
 
   function lockText() {
@@ -171,11 +156,6 @@ export function mountRuns(ctx) {
     const count = openNotes().length;
     const tweaks = tweakCount();
 
-    const bits = [];
-    if (count) bits.push(plural(count, 'note', 'notes'));
-    if (tweaks) bits.push(plural(tweaks, 'layout tweak', 'layout tweaks'));
-    meta.textContent = ourRunning() ? '' : bits.join(' and ');
-
     clearInterval(stopTick);
     if (ourRunning()) {
       stopBtn.disabled = stopping;
@@ -224,30 +204,15 @@ export function mountRuns(ctx) {
     return note && (note.status || 'open') !== 'done' ? 'Still open' : null;
   }
 
-  function decorateNotes() {
-    if (ctx.notesApi?.rendersRunTags) return;
-    for (const cardEl of ctx.slots.notes.querySelectorAll('[id^="note-"]')) {
-      const id = cardEl.id.slice('note-'.length);
-      const tag = noteTag(id);
-      const existing = cardEl.querySelector('.runs-still-open');
-      if (!tag) { existing?.remove(); continue; }
-      if (existing) continue;
-      const host = cardEl.querySelector('.n-top') || cardEl;
-      host.append(h('span', { class: 'tag tag-warning runs-still-open' }, tag));
-    }
-  }
-
   let queued = false;
-  function scheduleSync() {
+  ctx.notesChanged = () => {
     if (queued) return;
     queued = true;
     queueMicrotask(() => {
       queued = false;
       renderFooter();
-      decorateNotes();
     });
-  }
-  new MutationObserver(scheduleSync).observe(ctx.slots.notes, { childList: true, subtree: true });
+  };
 
   async function backfill(id) {
     try {
@@ -289,8 +254,7 @@ export function mountRuns(ctx) {
     lock(run.status === 'running');
     renderCard();
     renderFooter();
-    ctx.notesApi?.render?.();
-    decorateNotes();
+    ctx.notesApi.render();
     if (fresh && !activity && run.status === 'running') backfill(run.id);
   }
 
@@ -328,7 +292,7 @@ export function mountRuns(ctx) {
     starting = true;
     renderFooter();
     try {
-      await ctx.flushSaves?.();
+      await ctx.flushSaves();
       const next = await api.post('/api/runs', body);
       starting = false;
       applyRun(next, { activity: [] });
@@ -391,8 +355,7 @@ export function mountRuns(ctx) {
       toast('Reverted. The deck is back how it was before the run.', { tone: 'success' });
       if (target.kind === 'create') {
         if (target.description) localStorage.setItem('deckhand.draft', target.description);
-        if (ctx.goHome) ctx.goHome();
-        else location.assign('/');
+        ctx.goHome();
       }
     } catch (err) {
       toast(errorText(err), { tone: 'error' });

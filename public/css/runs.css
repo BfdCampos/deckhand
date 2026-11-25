@@ -2,8 +2,6 @@
 
 .runs-footer { padding: var(--space-3) var(--space-4) var(--space-4); }
 .runs-foot { display: flex; flex-direction: column; gap: var(--space-3); }
-.runs-foot-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--control-h-sm); }
-.runs-meta { text-align: right; }
 .runs-actions { display: flex; width: 100%; }
 .runs-main { flex: 1; min-width: 0; justify-content: center; }
 .runs-main .truncate { min-width: 0; }
@@ -13,7 +11,7 @@
 
 /* Agent chip */
 
-.agent-chip { max-width: 62%; }
+.agent-chip { max-width: 240px; }
 .agent-chip-name { overflow: hidden; text-overflow: ellipsis; }
 .agent-chip-caret { margin-left: -2px; }
 .agent-chip:disabled { cursor: not-allowed; opacity: 0.6; }
@@ -143,41 +141,6 @@
 .activity-error:not([hidden]) + .activity-summary { border-top: 0; padding-top: 0; }
 .activity-actions { flex: none; display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); }
 .activity-summary[hidden] + .activity-actions { border-top: 1px solid var(--line); }
-
-/* Locked stage */
-
-.runs-veil {
-  position: absolute;
-  inset: 0;
-  z-index: 36;
-  pointer-events: none;
-  background: #0a0c1124;
-  box-shadow: inset 0 0 0 1px var(--focus-ring);
-  animation: ui-fade-in var(--dur-screen) var(--ease-out) both;
-}
-.runs-pill {
-  position: absolute;
-  top: var(--space-4);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 32px;
-  padding: 0 var(--space-4);
-  font-size: var(--fs-13);
-  font-weight: var(--fw-medium);
-  color: var(--ink);
-  white-space: nowrap;
-  background: var(--raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-float), var(--shadow-inset-top);
-}
-
-/* Notes */
-
-.runs-still-open { flex: none; margin-left: auto; }
 
 /* Prompt and confirm dialogs */
 
