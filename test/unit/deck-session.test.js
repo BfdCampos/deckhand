@@ -151,8 +151,10 @@ describe('deck-session ops', () => {
   test('the work order has the tweak before the deck shows the move, and a failed save rolls it back', async () => {
     const seen = [];
     const md = s.file.replace('.html', '.deckhand.md');
-    const watcher = fs.watch(s.dir, (_e, name) => {
-      if (name === 'deck.html' && fs.readFileSync(s.file, 'utf8').includes('translate(30px, 0px)')) seen.push(fs.existsSync(md) && fs.readFileSync(md, 'utf8').includes('moved by (30, 0) px'));
+    const watcher = fs.watch(s.dir, () => {
+      let deck = '';
+      try { deck = fs.readFileSync(s.file, 'utf8'); } catch { return; }
+      if (deck.includes('translate(30px, 0px)')) seen.push(fs.existsSync(md) && fs.readFileSync(md, 'utf8').includes('moved by (30, 0) px'));
     });
     await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(30px, 0px)' } }]);
     for (let waited = 0; !seen.length && waited < 3000; waited += 25) await sleep(25);
