@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { slugify, uniqueDeckName } from '../../src/shared/slug.js';
 
 test('slugs are lowercase, hyphenated and skip leading filler', () => {
-  assert.equal(slugify('Make me a 6-slide pitch for our new coffee subscription, warm and minimal'), '6-slide-pitch-new-coffee-subscription');
+  assert.equal(slugify('Make me a 6-slide pitch for our new coffee subscription, warm and minimal'), 'pitch-new-coffee-subscription-warm-minimal');
   assert.equal(slugify('The Quarterly Review'), 'quarterly-review');
   assert.equal(slugify('Create an onboarding deck'), 'onboarding-deck');
 });
@@ -36,4 +36,18 @@ test('uniqueDeckName appends -2, -3 when the name is taken', () => {
   const taken = new Set(['tea.html', 'tea-2.html']);
   assert.equal(uniqueDeckName('tea', (n) => taken.has(n)), 'tea-3.html');
   assert.equal(uniqueDeckName('coffee', (n) => taken.has(n)), 'coffee.html');
+});
+
+test('meta phrases about the deck itself are left out of the name', () => {
+  assert.equal(slugify('a 3-slide deck introducing a community vegetable garden'), 'community-vegetable-garden');
+  assert.equal(slugify('A presentation about the history of tea'), 'history-tea');
+  assert.equal(slugify('slides on quarterly results'), 'quarterly-results');
+  assert.equal(slugify('10 slides about our Q3 roadmap'), 'q3-roadmap');
+  assert.equal(slugify('six-slide talk on solar power for schools'), 'solar-power-schools');
+  assert.equal(slugify('Create an onboarding deck'), 'onboarding-deck');
+  assert.equal(slugify('a 5 slide deck'), 'deck');
+});
+
+test('only the start of a very long description is used', () => {
+  assert.equal(slugify('Tea ' + 'x'.repeat(100000)), 'tea');
 });
