@@ -149,17 +149,11 @@ describe('deck-session ops', () => {
   });
 
   test('the work order has the tweak before the deck shows the move, and a failed save rolls it back', async () => {
-    const seen = [];
     const md = s.file.replace('.html', '.deckhand.md');
-    const watcher = fs.watch(s.dir, () => {
-      let deck = '';
-      try { deck = fs.readFileSync(s.file, 'utf8'); } catch { return; }
-      if (deck.includes('translate(30px, 0px)')) seen.push(fs.existsSync(md) && fs.readFileSync(md, 'utf8').includes('moved by (30, 0) px'));
-    });
     await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(30px, 0px)' } }]);
-    for (let waited = 0; !seen.length && waited < 3000; waited += 25) await sleep(25);
-    watcher.close();
-    assert.ok(seen.length && seen.every(Boolean), JSON.stringify(seen));
+    assert.ok((await fsp.readFile(md, 'utf8')).includes('moved by (30, 0) px'));
+    const [mdStat, deckStat] = await Promise.all([fsp.stat(md, { bigint: true }), fsp.stat(s.file, { bigint: true })]);
+    assert.ok(mdStat.mtimeNs <= deckStat.mtimeNs, 'the work order was written before the deck');
 
     await fsp.mkdir(s.file + '.deckhand-tmp');
     await assert.rejects(apply([{ type: 'setStyle', aiId: img, tag: 'img', props: { width: '50px', height: '50px' } }]), (e) => e.code === 'write_failed');
@@ -246,6 +240,67 @@ describe('deck-session ops', () => {
     await s.session.undo(meta.deckId, 't1', 'one');
   });
 
+  test('M6 a deck made read-only mid-session is refused, left alone and keeps its mode', async () => {
+    await fsp.chmod(s.file, 0o444);
+    await assert.rejects(apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Edited' }]), (e) => e.status === 403 && e.code === 'read_only');
+    assert.equal(await fsp.readFile(s.file, 'utf8'), DECK);
+    assert.equal((await fsp.stat(s.file)).mode & 0o777, 0o444);
+    assert.equal(s.session.meta().readOnly, true);
+    assert.equal(s.events.filter((e) => e.type === 'deck').at(-1).deck.readOnly, true);
+    await fsp.chmod(s.file, 0o640);
+    await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Edited' }]);
+    assert.equal(s.session.meta().readOnly, false);
+    assert.equal((await fsp.stat(s.file)).mode & 0o777, 0o640, 'the current mode is kept, not the one from open');
+  });
+
+  test('B1 a failed write is not mistaken for an external change', async () => {
+    await fsp.chmod(s.dir, 0o555);
+    try {
+      await assert.rejects(apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Lost?' }]), (e) => e.status === 403 && e.code === 'read_only');
+      await sleep(500);
+      assert.equal(s.events.filter((e) => e.type === 'deck-changed' && e.source === 'external').length, 0);
+      assert.match(s.session.servedSource(), />Title</);
+    } finally {
+      await fsp.chmod(s.dir, 0o755);
+    }
+    await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Saved' }]);
+    assert.match(await fsp.readFile(s.file, 'utf8'), />Saved</);
+  });
+
+  test('M1 an external change to another element does not block an edit made before it', async () => {
+    const staleRev = s.session.meta().rev;
+    await fsp.writeFile(s.file, s.session.servedSource().replace('>Two<', '>Two, edited elsewhere<'));
+    await waitFor(() => s.session.servedSource().includes('edited elsewhere'));
+    const res = await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Mine' }], 't1', staleRev);
+    assert.ok(res.rev > staleRev);
+    const disk = await fsp.readFile(s.file, 'utf8');
+    assert.ok(disk.includes('>Mine<') && disk.includes('edited elsewhere'));
+    await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(5px, 0px)' } }], 't1', staleRev);
+    await apply([{ type: 'insert', parentAiId: section, html: '<p>Added late</p>' }], 't1', staleRev);
+  });
+
+  test('M1 an external change to the same element still wins', async () => {
+    const staleRev = s.session.meta().rev;
+    await fsp.writeFile(s.file, s.session.servedSource().replace('>Title<', '>Their title<').replace('<img data-ai-id', '<img alt="x" data-ai-id'));
+    await waitFor(() => s.session.servedSource().includes('Their title'));
+    await assert.rejects(apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Mine' }], 't1', staleRev), (e) => e.status === 409 && e.code === 'deck_changed');
+    await assert.rejects(apply([{ type: 'setStyle', aiId: img, tag: 'img', props: { width: '10px' } }], 't1', staleRev), (e) => e.code === 'deck_changed');
+    assert.ok((await fsp.readFile(s.file, 'utf8')).includes('Their title'));
+  });
+
+  test('M2 an unknown baseRev, as after a restart, only lets checked text edits through', async () => {
+    await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Resubmitted' }], 't1', 9999);
+    assert.match(await fsp.readFile(s.file, 'utf8'), />Resubmitted</);
+    await assert.rejects(apply([{ type: 'remove', aiId: p, tag: 'p' }], 't1', 9999), (e) => e.code === 'deck_changed');
+  });
+
+  test('m1 a stale edit after another tab changed the same text is a conflict, not script-owned', async () => {
+    const base = s.session.meta().rev;
+    await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Tab one' }], 'tab1', base);
+    await assert.rejects(apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Tab two' }], 'tab2', base), (e) => e.status === 409 && e.code === 'edit_conflict');
+    await assert.rejects(apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Set by script', after: 'x' }], 'tab2'), (e) => e.code === 'script_owned');
+  });
+
   test('our own writes are not reported as external', async () => {
     await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Edited' }]);
     await sleep(400);
@@ -273,7 +328,7 @@ describe('deck-session ops', () => {
     const ev = await waitFor(() => s.events.find((e) => e.type === 'deck-changed' && e.source === 'external'));
     assert.ok(ev.rev > staleRev);
     assert.match(s.session.servedSource(), /<h1 data-ai-id="dh\d+">From the editor<\/h1>/);
-    await assert.rejects(apply([{ type: 'remove', aiId: p, tag: 'p' }], 't1', staleRev), (e) => e.status === 409 && e.code === 'deck_changed');
+    await assert.rejects(apply([{ type: 'remove', aiId: h1, tag: 'h1' }], 't1', staleRev), (e) => e.status === 409 && e.code === 'deck_changed');
     await assert.rejects(s.session.undo(meta.deckId, 't1', 'one'), (e) => e.code === 'cannot_undo');
     const fresh = idOf(s.session.servedSource(), /<p data-ai-id="(dh\d+)">/);
     await apply([{ type: 'remove', aiId: fresh, tag: 'p' }], 't1', ev.rev);

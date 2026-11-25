@@ -38,7 +38,6 @@ function createParser({ cwd }) {
   const roots = cwdRoots(cwd);
   const pending = new Map();
   let last = null;
-  let lastText = null;
   let outcome = { ok: null, text: null };
 
   const status = (text, out) => {
@@ -76,10 +75,7 @@ function createParser({ cwd }) {
     } else if (o.type === 'assistant') {
       for (const block of o.message?.content || []) {
         if (block.type === 'thinking') status(THINKING, out);
-        else if (block.type === 'text' && block.text?.trim()) {
-          lastText = block.text.trim();
-          out.push({ kind: 'text', text: lastText });
-        }
+        else if (block.type === 'text' && block.text?.trim()) out.push({ kind: 'text', text: block.text.trim() });
         else if (block.type === 'tool_use') {
           const event = toolEvent(block);
           if (event) pending.set(block.id, event);
@@ -95,8 +91,8 @@ function createParser({ cwd }) {
       const ok = o.subtype === 'success' && !o.is_error;
       const resultText = typeof o.result === 'string' ? o.result.trim() : '';
       outcome = { ok, text: resultText || null };
-      if (ok) out.push({ kind: 'result', text: resultText && resultText !== lastText ? resultText : 'Done.' });
-      else out.push({ kind: 'error', text: resultText || 'The run failed.' });
+      const repeat = ok && resultText && last?.kind === 'text' && last.text === resultText;
+      if (!repeat) out.push({ kind: ok ? 'result' : 'error', text: resultText || (ok ? 'Done.' : 'The run failed.') });
     }
     if (out.length) last = out.at(-1);
     return out;

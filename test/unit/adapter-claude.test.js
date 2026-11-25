@@ -61,8 +61,7 @@ test('recorded --restricted stream maps to readable events in order', () => {
     ['edit', 'Editing deck.html'],
   ]);
   assert.equal(events[5].kind, 'text');
-  assert.equal(events[6].kind, 'result');
-  assert.equal(events.length, 7);
+  assert.equal(events.length, 6, 'the result repeats the last text, so it adds no line');
   assert.equal(events[3].file, 'deck.html');
   assert.equal(events[1].tool, 'Read');
   assert.equal(result.ok, true);
@@ -80,7 +79,6 @@ test('thinking collapses into one line and outside reads show their path', () =>
     'read: Reading /etc/hosts',
     'status: Thinking…',
     'text',
-    'result',
   ]);
 });
 
@@ -109,7 +107,7 @@ test('the fake blocked scenario gives the AC-47 order', async () => {
   const inv = claude.invocation({ prompt: '[[fake:blocked]] go', guardrail: 'G', cwd, kind: 'edit', flags: ALL_FLAGS });
   const run = await runFake('claude', inv.args, { stdin: inv.stdin, cwd });
   const { events } = parseLines(run.stdout.split('\n'), cwd);
-  assert.deepEqual(events.map((e) => e.kind), ['status', 'read', 'blocked', 'blocked', 'edit', 'text', 'result']);
+  assert.deepEqual(events.map((e) => e.kind), ['status', 'read', 'blocked', 'blocked', 'edit', 'text']);
   assert.deepEqual(events.filter((e) => e.kind === 'blocked').map((e) => e.text), [
     'Blocked: Bash (not allowed)',
     'Blocked: Read (outside the deck folder)',
@@ -137,10 +135,10 @@ test('a CLI without --tools is too old to run', () => {
   assert.equal(claude.blocker(ALL_FLAGS), null);
 });
 
-test('the result line does not repeat the message just before it', () => {
+test('a result that repeats the message just before it is skipped', () => {
   const said = { type: 'assistant', message: { content: [{ type: 'text', text: 'All done here.' }] } };
   const same = parseLines([JSON.stringify(said), JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'All done here.' })], '/tmp');
-  assert.deepEqual(brief(same.events), [['text', 'All done here.'], ['result', 'Done.']]);
+  assert.deepEqual(brief(same.events), [['text', 'All done here.']]);
   assert.equal(same.result.text, 'All done here.');
   const different = parseLines([JSON.stringify(said), JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'Summary.' })], '/tmp');
   assert.deepEqual(brief(different.events).at(-1), ['result', 'Summary.']);
