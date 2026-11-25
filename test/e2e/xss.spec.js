@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { test, expect } from './local-server.js';
+import { test, expect } from './fixtures.js';
 
 const EVIL = '<img src=x onerror=alert(1)>';
 
-test.use({ deck: null });
+test.use({ allowedConsoleErrors: [/\/deckroot\/[^?]*\.deckhand\.json(\?|$)/] });
 
 test.beforeEach(async ({ deckhand }) => {
   await fs.mkdir(path.join(deckhand.home, EVIL));

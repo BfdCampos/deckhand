@@ -1,5 +1,10 @@
 import fs from 'node:fs/promises';
-import { test, expect } from './local-server.js';
+import { test, expect } from './fixtures.js';
+
+test.use({
+  deckhandOptions: { deck: 'samples/sample-deck.html' },
+  allowedConsoleErrors: [/\/deckroot\/[^?]*\.deckhand\.json(\?|$)/],
+});
 
 test('opens the sample deck, edits a heading, and the file on disk changes', async ({ page, deckhand }) => {
   await page.goto(deckhand.url);
