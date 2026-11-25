@@ -79,18 +79,20 @@ export function createEditor({ onHome }) {
     slots.agent,
   );
 
+  const sidebar = h('aside', { class: 'sidebar' },
+    h('div', { class: 'sb-head' },
+      h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
+      conn,
+    ),
+    slots.tools,
+    slots.notes,
+    slots.activity,
+    slots.footer,
+  );
+
   const root = h('div', { class: 'editor', hidden: true },
     h('div', { class: 'editor-main' }, topbar, banners, stage),
-    h('aside', { class: 'sidebar' },
-      h('div', { class: 'sb-head' },
-        h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
-        conn,
-      ),
-      slots.tools,
-      slots.notes,
-      slots.activity,
-      slots.footer,
-    ),
+    sidebar,
     overlayEl,
   );
   ctx.root = root;
@@ -161,18 +163,34 @@ export function createEditor({ onHome }) {
     ctx.notesApi.render();
   }
 
-  function showSwitched(deck, onSwitch) {
+  const elsewhereText = h('p', { class: 'editor-elsewhere-text', id: 'editor-elsewhere-text' });
+  const switchButton = h('button', { type: 'button', class: 'btn btn-primary' }, 'Switch to it');
+  const elsewhereHome = h('button', { type: 'button', class: 'btn btn-secondary' }, icon('home'), 'Go Home');
+  const elsewhere = h('div', { class: 'editor-elsewhere', role: 'alertdialog', 'aria-labelledby': 'editor-elsewhere-text', hidden: true },
+    h('div', { class: 'editor-elsewhere-card' },
+      h('span', { class: 'editor-elsewhere-icon' }, icon('alert')),
+      elsewhereText,
+      h('p', { class: 't-small text-muted' }, 'Edits here are paused so nothing is saved into the wrong file.'),
+      h('div', { class: 'editor-elsewhere-actions' }, elsewhereHome, switchButton)));
+  root.append(elsewhere);
+
+  function setPaused(paused) {
+    stage.inert = paused;
+    sidebar.inert = paused;
+    elsewhere.hidden = !paused;
+  }
+
+  function showElsewhere(deck, { onSwitch, onHome }) {
     state.closed = true;
     ctx.manual.endEditing();
     ctx.selected = null;
-    setBanner('closed', {
-      tone: 'warning',
-      icon: 'warning',
-      text: `${deck.name} was opened in another tab, so this deck is closed.`,
-      actions: [{ label: `Switch to ${deck.name}`, icon: 'refresh', onClick: onSwitch }, { label: 'Home', icon: 'home', onClick: goHome }],
-    });
+    ctx.notesApi.closePopovers();
+    elsewhereText.textContent = `Another tab opened ${deck.name || deck.path.split('/').pop()}.`;
+    switchButton.onclick = onSwitch;
+    elsewhereHome.onclick = onHome;
+    setPaused(true);
     syncControls();
-    ctx.notesApi.render();
+    switchButton.focus();
   }
 
   async function reopen() {
@@ -337,6 +355,7 @@ export function createEditor({ onHome }) {
     state.missing = !!deck.missing;
     state.closed = false;
     state.reloadWanted = null;
+    setPaused(false);
     saver.clearHistory();
     store.set({ deck });
     deckName.textContent = deck.name;
@@ -360,11 +379,13 @@ export function createEditor({ onHome }) {
     get deck() { return ctx.deck; },
     open,
     showClosed,
-    showSwitched,
+    showElsewhere,
     hide() {
       ctx.manual.endEditing();
       ctx.notesApi.closePopovers();
+      setPaused(false);
       root.hidden = true;
+      iframe.contentWindow?.location.replace('about:blank');
       setToastHost(null);
       delete document.body.dataset.ready;
       document.title = 'Deckhand';

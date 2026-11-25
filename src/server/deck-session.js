@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import chokidar from 'chokidar';
 import { HttpError } from './security.js';
+import { validateDeckPath } from './files.js';
 import { anchorSource, indexSource, planOp, applySplices, invertSplices, rebaseRanges, mergeTweak } from './source-patch.js';
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
@@ -13,17 +15,6 @@ const DEBOUNCE_MS = 100;
 const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer open.');
 const cannotUndo = () => new HttpError(409, 'cannot_undo', "That can't be undone any more.");
 
-const OPEN_ERRORS = {
-  ENOENT: ['not_found', "Couldn't find that file."],
-  ENOTDIR: ['not_found', "Couldn't find that file."],
-  EACCES: ['unreadable', "Couldn't read that file."],
-  EPERM: ['unreadable', "Couldn't read that file."],
-};
-
-function openError(code, message) {
-  return new HttpError(400, code, message);
-}
-
 async function writable(p) {
   try { await fsp.access(p, fs.constants.W_OK); return true; } catch { return false; }
 }
@@ -32,7 +23,7 @@ function stemOf(name) {
   return name.replace(/\.html?$/i, '');
 }
 
-export function createDeckSession({ hub, store = null, notes = null }) {
+export function createDeckSession({ hub, store = null, notes = null, home = os.homedir() }) {
   let deck = null;
   let watcher = null;
   let debounce = null;
@@ -152,29 +143,8 @@ export function createDeckSession({ hub, store = null, notes = null }) {
     });
   }
 
-  async function validate(p) {
-    if (typeof p !== 'string' || !p.trim()) throw openError('not_found', "Couldn't find that file.");
-    const abs = path.resolve(p);
-    let st;
-    try {
-      st = await fsp.stat(abs);
-    } catch (e) {
-      const [code, message] = OPEN_ERRORS[e.code] || ['unreadable', "Couldn't open that file."];
-      throw openError(code, message);
-    }
-    if (st.isDirectory()) throw openError('is_dir', 'That is a folder, not a deck.');
-    if (!/\.html?$/i.test(abs)) throw openError('not_html', 'Deckhand opens .html files.');
-    let real;
-    let buf;
-    try {
-      real = await fsp.realpath(abs);
-      buf = await fsp.readFile(real);
-    } catch (e) {
-      const [code, message] = OPEN_ERRORS[e.code] || ['unreadable', "Couldn't read that file."];
-      throw openError(code, message);
-    }
-    if (!buf.toString('utf8').trim()) throw openError('empty', 'That file is empty.');
-    return { real, buf, mode: st.mode & 0o7777 };
+  function validate(p) {
+    return validateDeckPath(p, { home });
   }
 
   function open(p) {

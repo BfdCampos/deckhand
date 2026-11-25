@@ -35,7 +35,7 @@ export function createDock(ctx) {
     observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting || entry.target.querySelector('iframe')) continue;
-        const frame = h('iframe', { class: 'dock-thumb', sandbox: 'allow-scripts', scrolling: 'no', tabindex: '-1', 'aria-hidden': 'true' });
+        const frame = h('iframe', { class: 'dock-thumb', sandbox: 'allow-same-origin', scrolling: 'no', tabindex: '-1', 'aria-hidden': 'true' });
         frame.srcdoc = docFor(list[Number(entry.target.dataset.index)]);
         entry.target.prepend(frame);
       }

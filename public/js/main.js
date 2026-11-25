@@ -1,5 +1,6 @@
 import { api, connectEvents, onEvent, deckFromState, normaliseDeck } from './api.js';
 import { store } from './store.js';
+import { confirmDeepLink } from './deep-link.js';
 import { createHome } from './home/home.js';
 import { createEditor } from './editor/editor.js';
 
@@ -34,9 +35,24 @@ function showHome({ push = false } = {}) {
   home.show(deck ? deck.dir : '');
 }
 
+let pendingOpen = null;
+
 async function openDeck(path, { push = true, slide = null } = {}) {
-  const deck = normaliseDeck(await api.post('/api/deck/open', { path }));
-  showEditor(deck, { push, slide });
+  pendingOpen = path;
+  try {
+    const deck = normaliseDeck(await api.post('/api/deck/open', { path }));
+    showEditor(deck, { push, slide });
+  } finally {
+    pendingOpen = null;
+  }
+}
+
+function askToOpen(wanted, slide) {
+  showHome();
+  confirmDeepLink(wanted, {
+    onOpen: () => openDeck(wanted, { push: true, slide }).catch((err) => { showHome(); home.showError(err.message); }),
+    onCancel: () => showHome(),
+  });
 }
 
 async function route({ boot = false } = {}) {
@@ -45,8 +61,7 @@ async function route({ boot = false } = {}) {
   const current = store.get().deck;
   if (wanted) {
     if (current && current.path === wanted) return showEditor(current, { push: false, slide });
-    showHome();
-    home.offerPath(wanted);
+    askToOpen(wanted, slide);
     return;
   }
   if (boot && current) return showEditor(current, { push: false });
@@ -80,7 +95,11 @@ onEvent((m) => {
     else if (wasReconnect) editor.ctx.reload('tab');
     return;
   }
-  editor.showSwitched(deck, () => showEditor(deck, { push: true }));
+  if (deck.path === pendingOpen) return;
+  editor.showElsewhere(deck, {
+    onSwitch: () => showEditor(deck, { push: false }),
+    onHome: () => showHome({ push: true }),
+  });
 });
 
 window.addEventListener('popstate', () => route());

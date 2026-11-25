@@ -28,7 +28,7 @@ const broadcast = (event) => hub?.broadcast(event);
 const hubProxy = { broadcast };
 const store = createStore({ stateDir: config.stateDir });
 const notes = createNotes({ hub: hubProxy });
-const session = createDeckSession({ hub: hubProxy, store, notes });
+const session = createDeckSession({ hub: hubProxy, store, notes, home: config.home });
 const assets = createAssets({ session });
 const runs = createLegacyRuns({ session, notes, broadcast, config });
 
@@ -53,7 +53,7 @@ function stateSnapshot() {
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home),
+  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home, { home: config.home }),
   'POST /api/open': ({ body }) => session.open(body.path),
   ...deckRoutes({ session, notes }),
   ...assets.routes,

@@ -74,3 +74,11 @@
 
 .prompt-intro { margin-bottom: var(--space-3); }
 .impl-prompt { margin: 0; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-control); padding: var(--space-3) var(--space-4); white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1.6; color: var(--ink-2); max-height: 240px; overflow: auto; }
+
+.editor { position: relative; }
+.editor-elsewhere { position: absolute; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: var(--space-6); background: var(--scrim); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); animation: ui-fade-in var(--dur-pop) var(--ease-out) both; }
+.editor-elsewhere[hidden] { display: none; }
+.editor-elsewhere-card { display: flex; flex-direction: column; gap: var(--space-3); width: min(420px, 100%); padding: var(--space-6); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-float), var(--shadow-inset-top); }
+.editor-elsewhere-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-control); color: var(--warning); background: var(--warning-tint); border: 1px solid var(--warning-line); }
+.editor-elsewhere-text { font-size: var(--fs-16); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+.editor-elsewhere-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
