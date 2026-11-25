@@ -111,7 +111,6 @@ export function createOpenCard({ openDeck, getInfo }) {
   }
 
   async function load() {
-    if (!getInfo()?.decksDir) { render([]); return; }
     try {
       const res = await api.get('/api/recents');
       render(res.items || []);

@@ -5,11 +5,7 @@ import { openModal } from '../ui/modal.js';
 import { openErrorText } from './paths.js';
 
 function crumbsFor(listing, home) {
-  const raw = listing.crumbs || listing.path.split('/').filter(Boolean).reduce((acc, part) => {
-    const prev = acc[acc.length - 1].path;
-    acc.push({ name: part, path: `${prev === '/' ? '' : prev}/${part}` });
-    return acc;
-  }, [{ name: '/', path: '/' }]);
+  const raw = listing.crumbs || [];
   if (!home) return raw;
   const i = raw.findIndex((c) => c.path === home);
   if (i < 0) return raw;
@@ -17,11 +13,7 @@ function crumbsFor(listing, home) {
 }
 
 function entriesOf(listing) {
-  return (listing.entries || []).map((e) => ({
-    name: e.name,
-    path: e.path || `${listing.path === '/' ? '' : listing.path}/${e.name}`,
-    kind: e.kind || (e.isDir ? 'dir' : 'deck'),
-  })).filter((e) => e.kind === 'dir' || e.kind === 'deck');
+  return (listing.entries || []).filter((e) => e.kind === 'dir' || e.kind === 'deck');
 }
 
 export function openBrowse({ openDeck, home }) {

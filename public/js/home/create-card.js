@@ -89,7 +89,6 @@ export function createCreateCard({ getInfo, onStarted }) {
     const mine = ++seq;
     const text = textarea.value.trim();
     if (!text) { setTarget('Saves to', decksLabel()); return; }
-    if (!getInfo()?.decksDir) return;
     timer = setTimeout(async () => {
       try {
         const res = await api.get(`/api/create/target?${new URLSearchParams({ description: text })}`);
