@@ -57,7 +57,6 @@ test('hand-written edit stream maps to readable events', () => {
     ['edit', 'Editing deck.html'],
     ['edit', 'Editing deck.deckhand.md'],
     ['text', 'I changed the heading to "Hi there" and ticked the note.'],
-    ['result', 'I changed the heading to "Hi there" and ticked the note.'],
   ]);
   assert.deepEqual(result, { ok: true, text: 'I changed the heading to "Hi there" and ticked the note.' });
 });

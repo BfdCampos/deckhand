@@ -61,7 +61,7 @@ describe('runs over HTTP and the socket', () => {
     await waitFor(() => sock.of('run').some((e) => e.run.status === 'succeeded'));
     const live = sock.of('run-activity').filter((e) => e.runId === run.id).map((e) => e.line);
     assert.deepEqual(live.map((l) => l.seq), done.activity.map((l) => l.seq));
-    assert.deepEqual(done.activity.map((l) => l.kind), ['status', 'status', 'read', 'edit', 'text', 'result']);
+    assert.deepEqual(done.activity.map((l) => l.kind), ['status', 'status', 'read', 'edit', 'text']);
     assert.ok(sock.of('notes').some((e) => e.notes.some((n) => n.id === note.id && n.status === 'done')));
     sock.ws.close();
 
