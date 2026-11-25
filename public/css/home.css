@@ -304,3 +304,6 @@
 .home-open.is-busy .recents { opacity: 0.55; }
 .browse-empty { padding: var(--space-6) var(--space-3); text-align: center; }
 .create-target { overflow: hidden; white-space: nowrap; }
+.gen-wait { color: var(--muted); }
+.open-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.open-foot .open-browse { align-self: auto; }
