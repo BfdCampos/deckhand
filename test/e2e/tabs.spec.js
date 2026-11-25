@@ -54,7 +54,7 @@ test('undo history is per tab', async ({ page, deckhand }) => {
 });
 
 test.describe('connection', () => {
-  test.use({ allowedConsoleErrors: [/WebSocket connection to .* failed/, /ERR_CONNECTION_REFUSED/, /Failed to load resource/] });
+  test.use({ allowedConsoleErrors: [/WebSocket connection to .* failed|ERR_CONNECTION_REFUSED|Failed to load resource/] });
 
   test('a stopped server shows a calm banner, pauses edits and recovers on restart', async ({ page, deckhand }) => {
     await openEditor(page, deckhand);

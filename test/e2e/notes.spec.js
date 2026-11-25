@@ -94,21 +94,25 @@ test('AC-42 notes edit inline from the sidebar and the pin, and delete cleanly',
   await expect(page.locator('.notes-empty')).toHaveText('No notes yet. Right-click anything on a slide to tell the AI what to change.');
 });
 
-test('AC-43 notes and pins survive a refresh and a server restart', async ({ page, deckhand }) => {
-  await openEditor(page, deckhand);
-  await addNote(page, deckFrame(page).locator('h1'), 'Keep me');
-  await expect.poll(async () => (await json(deckhand)).notes.length).toBe(1);
+test.describe('server restart', () => {
+  test.use({ allowedConsoleErrors: [/WebSocket connection to .* failed/] });
 
-  await page.reload();
-  await expect(page.locator('body[data-ready]')).toBeAttached();
-  await expect(page.locator('.note-item')).toContainText('Keep me');
-  await expect(page.locator('.pin')).toHaveCount(1);
+  test('AC-43 notes and pins survive a refresh and a server restart', async ({ page, deckhand }) => {
+    await openEditor(page, deckhand);
+    await addNote(page, deckFrame(page).locator('h1'), 'Keep me');
+    await expect.poll(async () => (await json(deckhand)).notes.length).toBe(1);
 
-  await deckhand.restart();
-  await page.reload();
-  await expect(page.locator('body[data-ready]')).toBeAttached();
-  await expect(page.locator('.note-item')).toContainText('Keep me');
-  await expect(page.locator('.pin')).toHaveCount(1);
+    await page.reload();
+    await expect(page.locator('body[data-ready]')).toBeAttached();
+    await expect(page.locator('.note-item')).toContainText('Keep me');
+    await expect(page.locator('.pin')).toHaveCount(1);
+
+    await deckhand.restart();
+    await page.reload();
+    await expect(page.locator('body[data-ready]')).toBeAttached();
+    await expect(page.locator('.note-item')).toContainText('Keep me');
+    await expect(page.locator('.pin')).toHaveCount(1);
+  });
 });
 
 test('the note popover names its target in plain words', async ({ page, deckhand }) => {
