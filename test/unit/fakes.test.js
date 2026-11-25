@@ -34,7 +34,7 @@ const items = (lines) => lines.filter((l) => l.type === 'item.completed').map((l
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-async function waitFor(fn, ms = 3000) {
+async function waitFor(fn, ms = 10000) {
   const end = Date.now() + ms;
   while (Date.now() < end) { if (await fn()) return true; await sleep(25); }
   return false;

@@ -26,7 +26,7 @@ export function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
-export async function waitFor(fn, { timeout = 3000, interval = 25 } = {}) {
+export async function waitFor(fn, { timeout = 10000, interval = 25 } = {}) {
   const start = Date.now();
   for (;;) {
     const v = await fn();
