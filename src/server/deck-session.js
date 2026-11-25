@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import chokidar from 'chokidar';
+import { validateDeckPath } from './files.js';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
-export function createDeckSession({ broadcast }) {
+export function createDeckSession({ broadcast, home = os.homedir() }) {
   const state = {
     deckPath: null,
     deckDir: null,
@@ -60,16 +62,14 @@ export function createDeckSession({ broadcast }) {
   }
 
   async function bind(p) {
-    const abs = path.resolve(p);
-    const st = await fsp.stat(abs);
-    if (!st.isFile()) throw Object.assign(new Error('Not a file'), { code: 'EISDIR' });
-    state.deckPath = abs;
-    state.deckDir = path.dirname(abs);
-    state.base = path.basename(abs);
+    const { real, buf } = await validateDeckPath(p, { home });
+    state.deckPath = real;
+    state.deckDir = path.dirname(real);
+    state.base = path.basename(real);
     const stem = state.base.replace(/\.html?$/i, '');
     state.notesJson = path.join(state.deckDir, `${stem}.deckhand.json`);
     state.notesMd = path.join(state.deckDir, `${stem}.deckhand.md`);
-    lastWrittenHash = sha(await fsp.readFile(abs, 'utf8'));
+    lastWrittenHash = sha(buf.toString('utf8'));
     startWatching();
     broadcast({ type: 'bound', deck: publicState() });
   }
