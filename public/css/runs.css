@@ -112,8 +112,16 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  white-space: pre-wrap;
 }
+.activity-text p { margin: 0; }
+.activity-text p + p, .activity-text p + ul, .activity-text p + ol, .activity-text ul + p, .activity-text ol + p { margin-top: 6px; }
+.activity-text ul, .activity-text ol { margin: 0; padding-left: 18px; }
+.activity-text ul { list-style: disc; }
+.activity-text ol { list-style: decimal; }
+.activity-text li + li { margin-top: 2px; }
+.activity-text strong { font-weight: var(--fw-semibold); color: var(--ink); }
+.activity-text code { font-size: 0.86em; padding: 0 4px; }
+.activity-line.kind-result .activity-text p { display: inline; }
 
 .activity-error {
   flex: none;

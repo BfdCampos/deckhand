@@ -1,5 +1,6 @@
 import { h } from '../dom.js';
 import { icon } from './icons.js';
+import { renderMarkdown } from './markdown.js';
 import { formatElapsed } from './util.js';
 
 const KIND_ICON = {
@@ -73,7 +74,7 @@ export function createActivityCard() {
     const glyph = KIND_ICON[kind] ? icon(KIND_ICON[kind], { size: 14 }) : h('span', { class: 'activity-bullet' });
     return h('li', { class: ['activity-line', `kind-${kind}`, animate && 'rise-in'] },
       kind === 'text' ? null : h('span', { class: 'activity-glyph', 'aria-hidden': 'true' }, glyph),
-      h('span', { class: 'activity-text' }, text));
+      h(kind === 'text' ? 'div' : 'span', { class: 'activity-text' }, kind === 'text' || kind === 'result' ? renderMarkdown(text) : text));
   }
 
   function add(line, animate) {
