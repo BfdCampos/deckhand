@@ -12,7 +12,12 @@ import { pidAlive, waitFor } from '../helpers/util.js';
 
 after(removeTempDirs);
 const live = [];
-after(async () => { for (const r of live) await r.stopAll().catch(() => {}); });
+after(async () => {
+  for (const { runs, session } of live) {
+    await runs.stopAll().catch(() => {});
+    await session.dispose().catch(() => {});
+  }
+});
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"></svg>';
 
@@ -44,7 +49,7 @@ async function setup({ agents = ['claude'], deck = 'basic.html', notes = ['Make 
   const runs = createRuns({
     config: { decksDir, home }, session, notes: notesMod, agents: agentsMod, store, broadcast: hub.broadcast, env: fullEnv, tmpDir: tmp, log: () => {},
   });
-  live.push(runs);
+  live.push({ runs, session });
   await session.open(deckPath);
   for (const text of notes) await notesMod.apply({ op: 'add', note: { text, aiId: 'dh1', targetTag: 'h1', slide: 1 } });
   const meta = session.meta();
