@@ -9,8 +9,12 @@ export function createHome({ openDeck }) {
   const error = h('div', { class: 'field-error home-error', role: 'alert', hidden: true }, icon('alert-circle', { size: 14 }), errorText);
   const manual = h('input', { type: 'text', class: 'input mono', placeholder: '…or paste an absolute path to a .html file', 'aria-label': 'Path to a deck' });
 
+  const offerText = h('span', null);
+  const offer = h('div', { class: 'field-hint home-offer', hidden: true }, icon('info', { size: 14 }), offerText);
+
   const open = async (p) => {
     showError('');
+    offer.hidden = true;
     try { await openDeck(p); } catch (err) { showError(err.message); }
   };
 
@@ -28,6 +32,7 @@ export function createHome({ openDeck }) {
         manual,
         h('button', { type: 'button', class: 'btn btn-secondary', onclick: () => open(manual.value.trim()) }, 'Open'),
       ),
+      offer,
       error,
     ),
   );
@@ -68,10 +73,17 @@ export function createHome({ openDeck }) {
     el,
     show(dir) {
       showError('');
+      offer.hidden = true;
       el.hidden = false;
       loadDir(dir);
     },
     hide() { el.hidden = true; },
     showError,
+    offerPath(path) {
+      manual.value = path;
+      offerText.textContent = 'A link asked Deckhand to open this deck. Press Open if you want to edit it.';
+      offer.hidden = false;
+      manual.focus();
+    },
   };
 }

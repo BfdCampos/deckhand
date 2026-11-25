@@ -45,12 +45,8 @@ async function route({ boot = false } = {}) {
   const current = store.get().deck;
   if (wanted) {
     if (current && current.path === wanted) return showEditor(current, { push: false, slide });
-    try {
-      await openDeck(wanted, { push: false, slide });
-    } catch (err) {
-      showHome();
-      home.showError(err.message);
-    }
+    showHome();
+    home.offerPath(wanted);
     return;
   }
   if (boot && current) return showEditor(current, { push: false });
@@ -79,8 +75,12 @@ onEvent((m) => {
   store.set({ deck });
   if (!editor.visible) return;
   const shown = editor.deck;
-  if (!shown || shown.deckId !== deck.deckId) showEditor(deck, { push: false, slide: urlSlide() });
-  else if (wasReconnect) editor.ctx.reload('tab');
+  if (!shown || shown.path === deck.path) {
+    if (!shown || shown.deckId !== deck.deckId) showEditor(deck, { push: false, slide: urlSlide() });
+    else if (wasReconnect) editor.ctx.reload('tab');
+    return;
+  }
+  editor.showSwitched(deck, () => showEditor(deck, { push: true }));
 });
 
 window.addEventListener('popstate', () => route());

@@ -11,3 +11,4 @@
 .picker-row.html .icon { color: var(--accent); }
 .picker-manual { margin-top: 14px; }
 .home-error { margin-top: 10px; }
+.home-offer { display: flex; align-items: center; gap: 6px; margin-top: 10px; }

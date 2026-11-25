@@ -18,7 +18,7 @@ const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const HINT_KEY = 'deckhand.hintDismissed';
 
 export function createEditor({ onHome }) {
-  const iframe = h('iframe', { id: 'deck', title: 'Deck' });
+  let iframe = h('iframe', { id: 'deck', title: 'Deck' });
   const overlayEl = h('div', { id: 'overlay', class: 'overlay' });
   const dockEl = h('div', { id: 'dock', class: 'dock', hidden: true });
   const pillText = h('span', null);
@@ -161,6 +161,20 @@ export function createEditor({ onHome }) {
     ctx.notesApi.render();
   }
 
+  function showSwitched(deck, onSwitch) {
+    state.closed = true;
+    ctx.manual.endEditing();
+    ctx.selected = null;
+    setBanner('closed', {
+      tone: 'warning',
+      icon: 'warning',
+      text: `${deck.name} was opened in another tab, so this deck is closed.`,
+      actions: [{ label: `Switch to ${deck.name}`, icon: 'refresh', onClick: onSwitch }, { label: 'Home', icon: 'home', onClick: goHome }],
+    });
+    syncControls();
+    ctx.notesApi.render();
+  }
+
   async function reopen() {
     try {
       const deck = normaliseDeck(await api.post('/api/deck/open', { path: ctx.deck.path }));
@@ -197,7 +211,10 @@ export function createEditor({ onHome }) {
     state.pendingScroll = scroll;
     ctx.selected = null;
     ctx.notesApi.closePopovers();
-    iframe.src = ctx.deck.url + (ctx.deck.url.includes('?') ? '&' : '?') + 't=' + Date.now();
+    const url = new URL(ctx.deck.url, location.origin);
+    url.searchParams.set('t', String(Date.now()));
+    if (iframe.contentWindow) iframe.contentWindow.location.replace(url.href);
+    else iframe.src = url.href;
   }
 
   function reload(reason = 'tab') {
@@ -302,8 +319,18 @@ export function createEditor({ onHome }) {
   }
   iframe.addEventListener('load', enhance);
 
+  function freshFrame() {
+    const next = h('iframe', { id: 'deck', title: 'Deck' });
+    next.addEventListener('load', enhance);
+    iframe.replaceWith(next);
+    iframe = next;
+    ctx.iframe = next;
+    bindFrame(next);
+  }
+
   function open(deck, { slide } = {}) {
     ctx.manual.endEditing();
+    if (ctx.deck) freshFrame();
     ctx.deck = deck;
     ctx.rev = deck.rev ?? 0;
     state.pendingRev = 0;
@@ -333,6 +360,7 @@ export function createEditor({ onHome }) {
     get deck() { return ctx.deck; },
     open,
     showClosed,
+    showSwitched,
     hide() {
       ctx.manual.endEditing();
       ctx.notesApi.closePopovers();
