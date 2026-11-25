@@ -399,7 +399,8 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     if (pid) {
       killGroup(pid, 'SIGTERM');
       const deadline = Date.now() + KILL_GRACE_MS;
-      while (groupAlive(pid) && Date.now() < deadline) await sleep(50);
+      const leaderGone = () => run.child.exitCode !== null || run.child.signalCode !== null;
+      while (groupAlive(pid) && !leaderGone() && Date.now() < deadline) await sleep(50);
       if (groupAlive(pid)) killGroup(pid, 'SIGKILL');
       await Promise.race([run.exited, sleep(500)]);
     }
