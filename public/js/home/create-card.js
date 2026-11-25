@@ -6,6 +6,7 @@ import { detectAgents, foundAgents, selectedAgent } from '../ui/agent-chip.js';
 import { isMac } from './paths.js';
 
 export const DRAFT_KEY = 'deckhand.draft';
+const TARGET_CHARS = 500;
 
 const PLACEHOLDER = "Describe the deck you want. Who's it for, what should it say, how many slides, any look and feel. For example: a 6-slide pitch for our new coffee subscription, warm and minimal, for the leadership team.";
 
@@ -91,7 +92,7 @@ export function createCreateCard({ getInfo, onStarted }) {
     if (!text) { setTarget('Saves to', decksLabel()); return; }
     timer = setTimeout(async () => {
       try {
-        const res = await api.get(`/api/create/target?${new URLSearchParams({ description: text })}`);
+        const res = await api.get(`/api/create/target?${new URLSearchParams({ description: text.slice(0, TARGET_CHARS) })}`);
         if (mine === seq && res?.display) setTarget('Saves as', res.display);
       } catch { /* keep the last line */ }
     }, 150);
