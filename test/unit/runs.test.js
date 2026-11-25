@@ -181,7 +181,7 @@ describe('edit runs', () => {
     const guard = argv[argv.indexOf('--append-system-prompt') + 1];
     assert.match(guard, /Never create, edit, move or delete any other file/);
     assert.ok(!argv.some((a) => a.includes('Read the Deckhand work order')));
-    assert.match(entry.stdin, /Read the Deckhand work order in deck\.deckhand\.md/);
+    assert.match(entry.stdin, /Read the Deckhand work order in "deck\.deckhand\.md"/);
   });
 
   test('AC-7 after choosing Codex the next run invokes codex with its sandbox flags', async () => {
@@ -428,5 +428,34 @@ describe('routes', () => {
     assert.equal((await routes['GET /api/runs/current']()).id, run.id);
     await routes['POST /api/runs/:id/revert']({ params: { id: run.id } });
     await assert.rejects(routes['POST /api/runs/:id/stop']({ params: { id: 'nope' } }), (e) => e.code === 'not_running');
+  });
+});
+
+describe('old CLIs', () => {
+  test('a Claude Code without --tools is refused before anything runs', async () => {
+    const t = await setup({ env: { FAKE_CLAUDE_HELP_OMIT: '--tools' } });
+    await assert.rejects(t.runs.start({ kind: 'edit', scope: 'all' }), (e) => e.status === 400 && e.code === 'agent_too_old'
+      && /^This version of Claude Code is too old for Deckhand\. Update it with `claude update`/.test(e.message));
+    await assert.rejects(t.runs.start({ kind: 'create', description: 'tea' }), (e) => e.code === 'agent_too_old');
+    assert.deepEqual(t.log(), []);
+    assert.equal(t.session.isLocked(), false);
+    assert.equal(t.runs.isBusy(), false);
+  });
+
+  test('without --restricted the run keeps --tools and disallows Bash and the web', async () => {
+    const t = await setup({ env: { FAKE_CLAUDE_HELP_OMIT: '--restricted' } });
+    await t.runs.start({ kind: 'edit', scope: 'all' });
+    const done = await finished(t.runs);
+    assert.equal(done.status, 'succeeded', done.error);
+    const { argv } = t.log()[0];
+    assert.ok(!argv.includes('--restricted'));
+    assert.equal(argv[argv.indexOf('--tools') + 1], 'Read,Edit,Write,Glob,Grep');
+    assert.equal(argv[argv.indexOf('--disallowed-tools') + 1], 'Bash,WebFetch,WebSearch');
+  });
+
+  test('a Codex without --sandbox is refused too', async () => {
+    const t = await setup({ agents: ['claude', 'codex'], env: { FAKE_CODEX_HELP_OMIT: '--sandbox' } });
+    await t.agents.select('codex');
+    await assert.rejects(t.runs.start({ kind: 'edit', scope: 'all' }), (e) => e.code === 'agent_too_old' && /Codex/.test(e.message));
   });
 });

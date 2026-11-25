@@ -115,3 +115,24 @@ test('the fake blocked scenario gives the AC-47 order', async () => {
     'Blocked: Read (outside the deck folder)',
   ]);
 });
+
+test('without --restricted, --tools stays and risky tools are also disallowed', () => {
+  const flags = new Set([...ALL_FLAGS, '--disallowed-tools'].filter((f) => f !== '--restricted'));
+  const inv = claude.invocation({ prompt: 'P', guardrail: 'G', cwd: '/tmp/x', kind: 'edit', flags });
+  assert.ok(!inv.args.includes('--restricted'));
+  assert.equal(inv.args[inv.args.indexOf('--tools') + 1], 'Read,Edit,Write,Glob,Grep');
+  assert.equal(inv.args[inv.args.indexOf('--disallowed-tools') + 1], 'Bash,WebFetch,WebSearch');
+  assert.equal(claude.blocker(flags), null);
+});
+
+test('with --restricted present, no disallow list is added', () => {
+  const inv = claude.invocation({ prompt: 'P', guardrail: 'G', cwd: '/tmp/x', kind: 'edit', flags: new Set([...ALL_FLAGS, '--disallowed-tools']) });
+  assert.ok(!inv.args.includes('--disallowed-tools'));
+});
+
+test('a CLI without --tools is too old to run', () => {
+  const flags = new Set([...ALL_FLAGS].filter((f) => f !== '--tools'));
+  assert.match(claude.blocker(flags), /^This version of Claude Code is too old for Deckhand\. Update it with `claude update`/);
+  assert.equal(claude.blocker(null), null);
+  assert.equal(claude.blocker(ALL_FLAGS), null);
+});
