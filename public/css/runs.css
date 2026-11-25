@@ -72,7 +72,7 @@
 .tone-done .activity-mark { background: var(--success); box-shadow: 0 0 0 3px var(--success-tint); }
 .tone-done .activity-state { color: var(--success); }
 .tone-error .activity-mark { background: var(--error); box-shadow: 0 0 0 3px var(--error-tint); }
-.tone-error .activity-state { color: var(--error); }
+.tone-error .activity-state { color: var(--error-ink); }
 .tone-error .activity-head { background: var(--error-tint); }
 .tone-stopped .activity-state, .tone-reverted .activity-state { color: var(--ink-2); }
 
@@ -101,7 +101,7 @@
 
 .activity-line.kind-status { color: var(--muted); }
 .activity-line.kind-blocked, .activity-line.kind-blocked .activity-glyph { color: var(--warning); }
-.activity-line.kind-error, .activity-line.kind-error .activity-glyph { color: var(--error); }
+.activity-line.kind-error, .activity-line.kind-error .activity-glyph { color: var(--error-ink); }
 .activity-line.kind-result { color: var(--ink); }
 .activity-line.kind-result .activity-glyph { color: var(--success); }
 .activity-line.kind-text {
