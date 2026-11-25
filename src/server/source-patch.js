@@ -6,8 +6,16 @@ const ANCHOR_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'blo
 const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 const FORBIDDEN_TAGS = new Set(['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'base', 'meta', 'link', 'style', 'template']);
 const URL_ATTRS = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'srcset', 'poster']);
-const STYLE_PROPS = new Set(['transform', 'width', 'height', 'max-width']);
-const STYLE_VALUE = /^[-a-zA-Z0-9.,%()\s#+]*$/;
+const NUM = '-?\\d+(?:\\.\\d+)?';
+const LENGTH = new RegExp(`^(?:${NUM}(?:px|%|em|rem|vw|vh)|0|auto|none)$`);
+const TRANSFORM_FN = `(?:translate|translateX|translateY|rotate|scale|scaleX|scaleY|skewX|skewY)\\(\\s*${NUM}(?:px|%|deg|turn|rad)?(?:\\s*,\\s*${NUM}(?:px|%|deg|turn|rad)?)?\\s*\\)`;
+const STYLE_RULES = {
+  width: LENGTH,
+  height: LENGTH,
+  'max-width': LENGTH,
+  translate: new RegExp(`^${NUM}(?:px|%)(?:\\s+${NUM}(?:px|%))?$`),
+  transform: new RegExp(`^(?:none|${TRANSFORM_FN}(?:\\s+${TRANSFORM_FN})*)$`),
+};
 
 const missing = (aiId) => new HttpError(409, 'anchor_missing', `There is no element ${aiId} in the deck.`);
 const mismatch = () => new HttpError(409, 'anchor_mismatch', 'That element no longer matches the deck.');
@@ -63,7 +71,7 @@ export function indexSource(src) {
       }
       if (child.namespaceURI === HTML_NS) {
         const cls = attrValue(child, 'class');
-        if ((cls && cls.split(/\s+/).includes('slide')) || attrValue(child, 'data-slide') !== undefined || (child.tagName === 'section' && node === body)) hasSlides = true;
+        if ((cls && cls.split(/\s+/).includes('slide')) || attrValue(child, 'data-slide') !== undefined || child.tagName === 'section') hasSlides = true;
       }
       let id = attrValue(child, 'data-ai-id');
       if (loc && id !== undefined && (id === '' || infos.has(id))) {
@@ -238,7 +246,11 @@ function px(value) {
 function tweakFromProps(tag, props) {
   const next = { tag };
   const fields = [];
-  if ('transform' in props) {
+  if ('translate' in props) {
+    fields.push('move');
+    const m = /^(-?\d+(?:\.\d+)?)px(?:\s+(-?\d+(?:\.\d+)?)px)?$/.exec(props.translate || '');
+    if (m) { next.dx = Math.round(Number(m[1])); next.dy = Math.round(Number(m[2] || 0)); }
+  } else if ('transform' in props) {
     fields.push('move');
     const m = /translate\(\s*(-?\d+(?:\.\d+)?)px\s*(?:,\s*(-?\d+(?:\.\d+)?)px\s*)?\)/.exec(props.transform || '');
     if (m) { next.dx = Math.round(Number(m[1])); next.dy = Math.round(Number(m[2] || 0)); }
@@ -505,9 +517,9 @@ function planSetStyle(index, op) {
   if (!props || typeof props !== 'object' || !Object.keys(props).length) throw badOp('Missing style properties.');
   const clean = {};
   for (const [k, v] of Object.entries(props)) {
-    if (!STYLE_PROPS.has(k)) throw badOp(`Deckhand can't set ${k}.`);
+    if (!STYLE_RULES[k]) throw badOp(`Deckhand can't set ${k}.`);
     if (v === null || v === '') { clean[k] = null; continue; }
-    if (typeof v !== 'string' || v.length > 200 || !STYLE_VALUE.test(v)) throw badOp('That style value is not allowed.');
+    if (typeof v !== 'string' || v.length > 200 || !STYLE_RULES[k].test(v.trim())) throw badOp('That style value is not allowed.');
     clean[k] = v.trim();
   }
   const src = index.source;
