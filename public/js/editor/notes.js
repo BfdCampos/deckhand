@@ -255,6 +255,7 @@ export function mountNotes(ctx) {
     const tweaks = Object.keys(ctx.layoutTweaks || {}).length;
     tweaksLine.hidden = !tweaks;
     tweaksLine.textContent = tweaks === 1 ? '1 layout tweak will go with the hand-off' : `${tweaks} layout tweaks will go with the hand-off`;
+    ctx.notesChanged?.();
   }
 
   function closePopovers() {
