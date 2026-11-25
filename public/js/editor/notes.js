@@ -1,69 +1,40 @@
 import { h } from '../dom.js';
 import { sendLegacy } from '../api.js';
+import { icon } from '../ui/icons.js';
+import { openPopover } from '../ui/popover.js';
 import { doc, win, frameEl, closestEditable, ensureId, slideIndexOf, parseTranslate, EDIT_SEL, IMG_SEL } from './frame.js';
 
-function describeTarget(t) {
-  const snip = t.text ? `: "${t.text.slice(0, 60)}${t.text.length > 60 ? '…' : ''}"` : '';
-  return `On <${t.tag}>${snip}`;
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+
+function targetLabel(t) {
+  const snip = t.text ? `'${t.text.slice(0, 60)}${t.text.length > 60 ? '…' : ''}'` : '';
+  return h('div', { class: 't-meta' }, `On <${t.tag}>`, snip ? ': ' : '', snip ? h('span', { class: 'text-ink' }, snip) : null);
 }
 
-function placeWithin(pop, x, y) {
-  const w = pop.offsetWidth, ht = pop.offsetHeight;
-  pop.style.left = Math.min(x, innerWidth - w - 12) + 'px';
-  pop.style.top = Math.min(y, innerHeight - ht - 12) + 'px';
+function noteMeta(n) {
+  return (n.scope === 'global' ? 'all similar' : (n.targetTag || 'note')) + (n.slide ? ' · slide ' + n.slide : '');
 }
 
 export function mountNotes(ctx) {
-  const count = h('span', { class: 'count' }, '0');
+  const count = h('span', { class: 'pill-count' }, '0');
   const list = h('div', { class: 'notes-list' });
-  ctx.slots.notes.append(h('div', { class: 'sb-title' }, 'Notes for the AI ', count), list);
+  ctx.slots.notes.append(h('div', { class: 'sb-title' }, h('span', { class: 't-label' }, 'Notes for the AI'), count), list);
 
-  let noteTarget = null;
-  const noteTargetLabel = h('div', { class: 'note-pop-target' });
-  const noteText = h('textarea', { placeholder: 'Tell the AI what to change here…' });
-  const noteScope = h('input', { type: 'checkbox' });
-  const notePop = h('div', { class: 'note-pop', hidden: true },
-    noteTargetLabel,
-    noteText,
-    h('label', { class: 'note-scope' }, noteScope, ' apply to all similar elements'),
-    h('div', { class: 'note-pop-actions' },
-      h('button', { type: 'button', class: 'ghost', onclick: closeNotePop }, 'Cancel'),
-      h('button', { type: 'button', onclick: saveNotePop }, 'Add note'),
-    ),
-  );
+  let notePop = null;
+  let pinPop = null;
 
-  let pinNote = null;
-  const pinMeta = h('div', { class: 'note-pop-target' });
-  const pinText = h('textarea');
-  const pinPop = h('div', { class: 'note-pop', hidden: true },
-    pinMeta,
-    pinText,
-    h('div', { class: 'note-pop-actions' },
-      h('button', { type: 'button', class: 'ghost', onclick: deletePinNote }, 'Delete'),
-      h('button', { type: 'button', onclick: savePinPop }, 'Save'),
-    ),
-  );
-  ctx.root.append(notePop, pinPop);
-
-  noteText.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveNotePop();
-    if (e.key === 'Escape') closeNotePop();
-  });
-  pinText.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') savePinPop();
-    if (e.key === 'Escape') closePinPop();
-  });
-  document.addEventListener('click', (e) => {
-    if (!pinPop.contains(e.target)) closePinPop();
-    if (!notePop.contains(e.target)) dismissEmpty();
-  });
+  function submitOnModEnter(field, submit) {
+    field.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit(); }
+    });
+  }
 
   function openFromContextMenu(e) {
     e.preventDefault();
     const t = closestEditable(e.target) || e.target;
     ensureId(t);
     const w = win();
-    noteTarget = {
+    const target = {
       aiId: t.getAttribute('data-ai-id'),
       tag: t.tagName.toLowerCase(),
       text: t.matches(IMG_SEL) ? (t.getAttribute('alt') || t.getAttribute('src') || '') : (t.innerText || '').trim(),
@@ -71,49 +42,76 @@ export function mountNotes(ctx) {
       docY: e.clientY + w.scrollY,
       slide: slideIndexOf(t),
     };
+    if (notePop) notePop.close();
+    if (pinPop) pinPop.close();
+
+    const text = h('textarea', { class: 'textarea', rows: 3, placeholder: 'Tell the AI what to change here…', 'aria-label': 'Note' });
+    const scope = h('input', { type: 'checkbox' });
+    const save = () => {
+      const value = text.value.trim();
+      if (value) {
+        ctx.notes.push({
+          id: 'n' + Date.now(), aiId: target.aiId, targetTag: target.tag, targetText: target.text,
+          scope: scope.checked ? 'global' : 'element', text: value,
+          docX: target.docX, docY: target.docY, slide: target.slide,
+        });
+        render();
+        persist();
+        ctx.commit();
+      }
+      pop.close();
+    };
+    submitOnModEnter(text, save);
+
     const fr = frameEl().getBoundingClientRect();
-    noteTargetLabel.textContent = describeTarget(noteTarget);
-    noteText.value = '';
-    noteScope.checked = false;
-    notePop.hidden = false;
-    placeWithin(notePop, fr.left + e.clientX, fr.top + e.clientY);
-    noteText.focus();
-  }
-
-  function saveNotePop() {
-    const text = noteText.value.trim();
-    if (!text || !noteTarget) return closeNotePop();
-    ctx.notes.push({
-      id: 'n' + Date.now(), aiId: noteTarget.aiId, targetTag: noteTarget.tag, targetText: noteTarget.text,
-      scope: noteScope.checked ? 'global' : 'element', text,
-      docX: noteTarget.docX, docY: noteTarget.docY, slide: noteTarget.slide,
+    const pop = openPopover({
+      x: fr.left + e.clientX,
+      y: fr.top + e.clientY,
+      label: 'Add a note',
+      className: 'note-pop',
+      outsideDocs: [doc()],
+      canDismiss: () => text.value.trim() === '',
+      onClose: () => { if (notePop === pop) notePop = null; },
+      content: h('div', { class: 'note-pop-body' },
+        targetLabel(target),
+        text,
+        h('label', { class: 'check' }, scope, 'Apply to all similar elements'),
+        h('div', { class: 'row gap-2 end' },
+          h('span', { class: 'grow t-meta' }, h('span', { class: 'kbd' }, `${MOD} Enter`)),
+          h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => pop.close() }, 'Cancel'),
+          h('button', { type: 'button', class: 'btn btn-secondary btn-sm', onclick: save }, 'Add note'),
+        ),
+      ),
     });
-    closeNotePop();
-    render();
-    persist();
-    ctx.commit();
+    notePop = pop;
+    text.focus();
   }
-
-  function closeNotePop() { notePop.hidden = true; noteTarget = null; }
-  function dismissEmpty() { if (!notePop.hidden && !noteText.value.trim()) closeNotePop(); }
 
   function openPinPop(n, pinEl) {
-    pinNote = n;
-    pinMeta.textContent = (n.scope === 'global' ? 'all similar' : (n.targetTag || 'note')) + (n.slide ? ' · slide ' + n.slide : '');
-    pinText.value = n.text;
-    pinPop.hidden = false;
-    const r = pinEl.getBoundingClientRect();
-    const w = pinPop.offsetWidth, ht = pinPop.offsetHeight;
-    let x = r.right + 8; if (x + w > innerWidth - 8) x = r.left - w - 8;
-    let y = r.top; if (y + ht > innerHeight - 8) y = innerHeight - ht - 8;
-    pinPop.style.left = Math.max(8, x) + 'px';
-    pinPop.style.top = Math.max(8, y) + 'px';
-    pinText.focus();
+    if (pinPop) pinPop.close();
+    const text = h('textarea', { class: 'textarea', rows: 3, 'aria-label': 'Note' });
+    text.value = n.text;
+    const save = () => { n.text = text.value.trim(); render(); persist(); pop.close(); };
+    submitOnModEnter(text, save);
+    const pop = openPopover({
+      anchor: pinEl,
+      label: 'Edit note',
+      className: 'note-pop',
+      outsideDocs: [doc()],
+      onClose: () => { if (pinPop === pop) pinPop = null; },
+      content: h('div', { class: 'note-pop-body' },
+        h('div', { class: 't-meta' }, noteMeta(n)),
+        text,
+        h('div', { class: 'row gap-2 end' },
+          h('button', { type: 'button', class: 'btn btn-danger btn-sm', onclick: () => { remove(n); pop.close(); } }, 'Delete'),
+          h('span', { class: 'grow' }),
+          h('button', { type: 'button', class: 'btn btn-secondary btn-sm', onclick: save }, 'Save'),
+        ),
+      ),
+    });
+    pinPop = pop;
+    text.focus();
   }
-
-  function closePinPop() { pinPop.hidden = true; pinNote = null; }
-  function savePinPop() { if (!pinNote) return; pinNote.text = pinText.value.trim(); render(); persist(); closePinPop(); }
-  function deletePinNote() { if (!pinNote) return; remove(pinNote); closePinPop(); }
 
   function remove(n) {
     ctx.notes = ctx.notes.filter((x) => x !== n);
@@ -123,18 +121,21 @@ export function mountNotes(ctx) {
 
   function noteActions(n) {
     const st = ctx.runs && ctx.runs.stateOf(n.id);
-    if (st === 'running') return h('span', { class: 'n-run running' }, 'running…');
-    if (st === 'queued') return h('span', { class: 'n-run queued' }, 'queued');
+    if (st === 'running') return h('span', { class: 'n-run t-meta text-accent' }, h('span', { class: 'spin' }), 'Running…');
+    if (st === 'queued') return h('span', { class: 'n-run t-meta' }, 'Queued');
     return [
-      h('button', { type: 'button', class: 'run', onclick: () => ctx.runs.runNote(n) }, 'Run'),
-      h('button', {
-        type: 'button',
-        onclick: () => {
-          const v = prompt('Edit note', n.text);
-          if (v != null) { n.text = v.trim(); render(); persist(); }
-        },
-      }, 'Edit'),
-      h('button', { type: 'button', onclick: () => remove(n) }, 'Delete'),
+      h('div', { class: 'btn-group' },
+        h('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => ctx.runs.runNote(n) }, icon('play', { size: 14 }), 'Run'),
+        h('button', {
+          type: 'button',
+          class: 'btn btn-sm btn-secondary',
+          onclick: () => {
+            const v = prompt('Edit note', n.text);
+            if (v != null) { n.text = v.trim(); render(); persist(); }
+          },
+        }, icon('pencil', { size: 14 }), 'Edit'),
+      ),
+      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onclick: () => remove(n) }, 'Delete'),
     ];
   }
 
@@ -142,8 +143,8 @@ export function mountNotes(ctx) {
     count.textContent = ctx.notes.length;
     list.replaceChildren(...ctx.notes.map((n, i) => h('div', { class: 'note-item', id: 'note-' + n.id },
       h('div', { class: 'n-top' },
-        h('span', { class: 'n-badge' }, String(i + 1)),
-        h('span', { class: 'n-meta' }, (n.scope === 'global' ? 'all similar' : n.targetTag) + (n.slide ? ' · slide ' + n.slide : '')),
+        h('span', { class: 'badge' }, String(i + 1)),
+        h('span', { class: 't-meta' }, noteMeta(n)),
       ),
       h('div', { class: 'n-text' }, n.text),
       h('div', { class: 'n-actions' }, noteActions(n)),
@@ -178,5 +179,5 @@ export function mountNotes(ctx) {
     sendLegacy({ type: 'save-notes', payload: { notes: ctx.notes, layoutTweaks: computeTweaks() } });
   }
 
-  return { load, render, persist, computeTweaks, openFromContextMenu, openPinPop, dismissEmpty };
+  return { load, render, persist, computeTweaks, openFromContextMenu, openPinPop };
 }
