@@ -3,7 +3,12 @@ import { test, expect } from './fixtures.js';
 
 test.use({
   deckhandOptions: { deck: 'test/fixtures/decks/basic.html' },
-  allowedConsoleErrors: [/deckhand\.json|Content Security Policy|Failed to load resource|Failed to fetch/],
+  allowedConsoleErrors: [[
+    /^Failed to load resource: the server responded with a status of 404/,
+    /violates the following Content Security Policy directive: "connect-src 'none'"/,
+    /^Fetch API cannot load http:\/\/127\.0\.0\.1:\d+\/api\/fs\?dir=\/\. Refused to connect because it violates the document's Content Security Policy\./,
+    /Failed to fetch/,
+  ]],
 });
 
 test('slide scripts never run in dock thumbnails, so they cannot reach the API', async ({ page, deckhand }) => {
