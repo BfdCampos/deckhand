@@ -99,7 +99,7 @@ function createParser({ cwd }) {
       out.push({ kind: 'error', text: message });
     } else if (o.type === 'turn.completed') {
       outcome = { ok: true, text: lastMessage };
-      out.push({ kind: 'result', text: lastMessage || 'Done.' });
+      out.push({ kind: 'result', text: 'Done.' });
     }
     if (out.length) last = out.at(-1);
     return out;
