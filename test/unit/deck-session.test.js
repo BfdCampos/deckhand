@@ -232,6 +232,18 @@ describe('deck-session ops', () => {
     assert.equal(s.events.filter((e) => e.type === 'deck-changed' && e.source === 'external').length, 0);
   });
 
+  for (const [delay, how] of [[0, 'write'], [20, 'write'], [50, 'write'], [100, 'write'], [300, 'write'], [700, 'write'], [0, 'rename'], [50, 'rename'], [400, 'rename']]) {
+    test(`an external ${how} ${delay} ms after a save is still detected`, async () => {
+      await apply([{ type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Saved by Deckhand' }]);
+      if (delay) await sleep(delay);
+      const text = DECK.replace('Title', `External ${delay}`);
+      if (how === 'write') await fsp.writeFile(s.file, text);
+      else { await fsp.writeFile(s.file + '.x', text); await fsp.rename(s.file + '.x', s.file); }
+      await waitFor(() => s.session.servedSource().includes(`External ${delay}`), 1500);
+      assert.ok(s.events.some((e) => e.type === 'deck-changed' && e.source === 'external'));
+    });
+  }
+
   test('an external write reloads, clears undo and rejects stale ops', async () => {
     await apply([{ opId: 'one', type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'Edited' }]);
     const staleRev = s.session.meta().rev;
@@ -370,6 +382,25 @@ describe('deck routes over HTTP', () => {
     const stale = await post('/api/notes', { deckId: 'old', op: 'add', note: { text: 'x' } });
     assert.equal(stale.status, 409);
     assert.equal(stale.json.error.code, 'deck_closed');
+  });
+
+  test('adding a note writes the anchors so the work order matches the file', async () => {
+    const state = await (await fetch(dh.url + '/api/state')).json();
+    const served = await (await fetch(dh.url + state.deck.url)).text();
+    await fetch(dh.url + '/api/notes');
+    assert.equal(fs.readFileSync(dh.deckPath, 'utf8').includes('data-ai-id'), false, 'viewing does not write');
+    const h2 = /<h2 data-ai-id="(dh\d+)">/.exec(served)[1];
+    const add = await post('/api/notes', { deckId: state.deck.deckId, op: 'add', note: { aiId: h2, targetTag: 'h2', text: 'Bigger' } });
+    assert.equal(add.status, 200);
+    assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes(`<h2 data-ai-id="${h2}">`));
+  });
+
+  test('copying the prompt writes the anchors too', async () => {
+    const state = await (await fetch(dh.url + '/api/state')).json();
+    const res = await post('/api/implement', {});
+    assert.equal(res.status, 200);
+    assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes('data-ai-id'));
+    assert.ok(state.deck);
   });
 
   test('deck routes refuse foreign origins and non-JSON', async () => {
