@@ -30,6 +30,10 @@ export function createManual(ctx) {
     d.addEventListener('dblclick', onDblClick, true);
     d.addEventListener('contextmenu', (e) => ctx.notesApi.openFromContextMenu(e), true);
     d.addEventListener('paste', onPaste, true);
+    d.addEventListener('click', (e) => {
+      const link = e.target.closest && e.target.closest('a[href]');
+      if (link && !link.getAttribute('href').startsWith('#')) e.preventDefault();
+    }, true);
   }
 
   function select(t) { ctx.selected = t; }
