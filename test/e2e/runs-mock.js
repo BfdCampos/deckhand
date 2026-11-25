@@ -42,7 +42,7 @@ export function writeNotes(deckPath, notes, layoutTweaks = {}) {
   return full;
 }
 
-export async function mockRuns(page, { deckPath, agents = ['claude'], selected = 'claude', run = null, activity = [] } = {}) {
+export async function mockRuns(page, { deckPath, agents = ['claude'], selected = 'claude', run = null, activity = [], extraState = () => ({}), createTarget = null } = {}) {
   const mock = {
     found: [...agents],
     selected,
@@ -106,7 +106,7 @@ export async function mockRuns(page, { deckPath, agents = ['claude'], selected =
     if (key === 'GET /api/state') {
       const res = await route.fetch();
       const real = await res.json();
-      return json(route, 200, { ...real, agents: mock.agents(), run: mock.run });
+      return json(route, 200, { ...real, ...extraState(), agents: mock.agents(), run: mock.run });
     }
 
     const handled = [
@@ -140,6 +140,10 @@ export async function mockRuns(page, { deckPath, agents = ['claude'], selected =
       return json(route, 200, mock.run ? { ...mock.run, activity: mock.activity } : null);
     }
     if (key === 'GET /api/prompt') {
+      if (url.searchParams.get('kind') === 'create') {
+        const description = url.searchParams.get('description') || '';
+        return json(route, 200, { prompt: `You're creating a new slide deck for Deckhand.\n\n${description}`, deckPath: createTarget?.(description) || null, workOrderPath: null });
+      }
       const scope = url.searchParams.get('scope') || 'all';
       const prompt = [
         `Read the Deckhand work order at ${workOrderPath}, then edit ${deckPath}.`,
@@ -162,8 +166,9 @@ export async function mockRuns(page, { deckPath, agents = ['claude'], selected =
         status: 'running',
         scope: body.scope,
         noteIds: body.noteId ? [body.noteId] : (body.noteIds || []),
-        label: body.scope === 'note' ? null : 'All notes',
-        targetPath: deckPath,
+        label: body.kind === 'create' ? 'New deck' : body.scope === 'note' ? null : 'All notes',
+        description: body.kind === 'create' ? body.description : undefined,
+        targetPath: body.kind === 'create' ? createTarget?.(body.description) : deckPath,
         startedAt: new Date().toISOString(),
         canRevert: false,
       };
