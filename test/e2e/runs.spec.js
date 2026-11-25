@@ -26,7 +26,7 @@ async function openEditor(page, deckhand, { notes = [], ...opts } = {}) {
 }
 
 const handoff = (page) => page.locator('.runs-handoff');
-const card = (page) => page.locator('.activity-card');
+const card = (page) => page.locator('.editor .activity-card');
 
 test('AC-44 hand-off is disabled with no notes and no tweaks', async ({ page, deckhand }) => {
   await openEditor(page, deckhand);
