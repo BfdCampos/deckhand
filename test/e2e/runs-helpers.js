@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { expect } from './fixtures.js';
+import { editUrl } from './editor-helpers.js';
 
 export const BASIC = 'test/fixtures/decks/basic.html';
 
@@ -31,7 +32,7 @@ export async function addNotes(deckhand, notes) {
 }
 
 export async function openEditor(page, deckhand) {
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await expect(page.locator('.editor')).toBeVisible();
   await expect(page.locator('.runs-foot')).toBeVisible();
   await expect(page.frameLocator('iframe#deck').locator('h1')).toBeVisible();
