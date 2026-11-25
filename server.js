@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import crypto from 'node:crypto';
 import { loadConfig, PORT_ATTEMPTS } from './src/server/config.js';
-import { createGuard, HttpError } from './src/server/security.js';
+import { createGuard } from './src/server/security.js';
 import { createHttp } from './src/server/http.js';
 import { createHub } from './src/server/hub.js';
 import { createStore } from './src/server/store.js';
@@ -25,7 +25,7 @@ let hub = null;
 const broadcast = (event) => hub?.broadcast(event);
 
 const store = createStore({ stateDir: config.stateDir });
-const session = createDeckSession({ broadcast });
+const session = createDeckSession({ broadcast, home: config.home });
 const notes = createNotes({ session });
 const assets = createAssets({ session });
 const runs = createLegacyRuns({ session, notes, broadcast, config });
@@ -34,22 +34,8 @@ let port = null;
 const guard = createGuard({ getPort: () => port });
 const app = createHttp({ config, guard, deckDir: () => session.state.deckDir });
 
-const OPEN_ERRORS = {
-  ENOENT: [400, 'not_found', "Couldn't find that file."],
-  ENOTDIR: [400, 'not_found', "Couldn't find that file."],
-  EISDIR: [400, 'is_dir', 'That is a folder, not a deck.'],
-  EACCES: [400, 'unreadable', "Couldn't read that file."],
-  EPERM: [400, 'unreadable', "Couldn't read that file."],
-};
-
 async function openDeck(p) {
-  if (typeof p !== 'string' || !p) throw new HttpError(400, 'not_found', "Couldn't find that file.");
-  try {
-    await session.bind(p);
-  } catch (e) {
-    const [status, code, message] = OPEN_ERRORS[e.code] || [400, 'unreadable', "Couldn't open that file."];
-    throw new HttpError(status, code, message);
-  }
+  await session.bind(p);
 }
 
 function stateSnapshot() {
@@ -59,7 +45,7 @@ function stateSnapshot() {
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home),
+  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home, { home: config.home }),
   'POST /api/open': async ({ body }) => {
     await openDeck(body.path);
     return session.publicState();
