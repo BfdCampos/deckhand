@@ -59,9 +59,9 @@ export async function blurEditing(page) {
   await page.locator('.sidebar .sb-head').click();
 }
 
-export async function dragBy(page, locator, dx, dy) {
+export async function dragBy(page, locator, dx, dy, { centre = false } = {}) {
   const box = await locator.boundingBox();
-  const x = box.x + Math.min(20, box.width / 2);
+  const x = box.x + (centre ? box.width / 2 : Math.min(20, box.width / 2));
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();

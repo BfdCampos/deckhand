@@ -32,7 +32,7 @@ test.describe('manual edits', () => {
     const li = deckFrame(page).locator('li', { hasText: 'First thing' });
     await li.scrollIntoViewIfNeeded();
     await dragBy(page, li, 100, 0);
-    await diskEventually(deckhand.deckPath, (s) => /<li data-ai-id="dh\d+" style="transform: translate\(100px, 0px\);">First thing/.test(s));
+    await diskEventually(deckhand.deckPath, (s) => /<li data-ai-id="dh\d+" style="translate: 100px 0px;">First thing/.test(s));
     await diskEventually(sidecar(deckhand.deckPath, 'md'), (s) => /\(li\): moved by \(100, 0\) px/.test(s));
     await expectSaved(page);
   });
@@ -104,7 +104,7 @@ test.describe('manual edits', () => {
     await diskEventually(deckhand.deckPath, (s) => s.includes('>Added words</div>'));
 
     await dragBy(page, frame.locator('h1'), 100, 0);
-    await diskEventually(deckhand.deckPath, (s) => /<h1[^>]*transform: translate\(100px, 0px\)/.test(s));
+    await diskEventually(deckhand.deckPath, (s) => /<h1[^>]*translate: 100px 0px/.test(s));
 
     await addImage(page, { width: 200, height: 100 });
     await diskEventually(deckhand.deckPath, (s) => s.includes('<img'));
@@ -128,7 +128,7 @@ test.describe('manual edits', () => {
     await undo();
     await diskEventually(deckhand.deckPath, (s) => !s.includes('<img'));
     await undo();
-    await diskEventually(deckhand.deckPath, (s) => !s.includes('translate(100px'));
+    await diskEventually(deckhand.deckPath, (s) => !s.includes('translate: 100px'));
     await undo();
     await diskEventually(deckhand.deckPath, (s) => s.includes('>New text</div>'));
     await expect(frame.locator('[data-editable]')).toHaveText('New text');

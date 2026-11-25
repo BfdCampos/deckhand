@@ -33,6 +33,14 @@ function snippet(text) {
   return text ? `'${text.slice(0, 60)}${text.length > 60 ? '…' : ''}'` : '';
 }
 
+function popTarget(el, target) {
+  const isSlide = el.matches(SLIDE_SEL);
+  const what = isSlide ? `slide${target.slide ? ` ${target.slide}` : ''}` : el.hasAttribute('data-editable') ? 'text box' : targetLabel(target.tag);
+  const text = isSlide ? '' : el.matches(IMG_SEL) ? (el.getAttribute('alt') || '') : target.text;
+  const quote = snippet(text);
+  return h('div', { class: 'note-pop-target t-meta' }, `On ${what}`, quote ? ': ' : '', quote ? h('span', { class: 'text-ink' }, quote) : null);
+}
+
 export function mountNotes(ctx) {
   const count = h('span', { class: 'pill-count' }, '0');
   const list = h('div', { class: 'notes-list' });
@@ -122,7 +130,6 @@ export function mountNotes(ctx) {
     submitOnModEnter(text, save);
 
     const fr = frameEl().getBoundingClientRect();
-    const label = snippet(target.text);
     const pop = openPopover({
       x: fr.left + e.clientX,
       y: fr.top + e.clientY,
@@ -132,7 +139,7 @@ export function mountNotes(ctx) {
       canDismiss: () => text.value.trim() === '',
       onClose: () => { if (notePop === pop) notePop = null; },
       content: h('div', { class: 'note-pop-body' },
-        h('div', { class: 't-meta' }, `On ${target.tag === 'section' || t.matches(SLIDE_SEL) ? 'slide' : targetLabel(target.tag)}`, label ? ': ' : '', label ? h('span', { class: 'text-ink' }, label) : null),
+        popTarget(t, target),
         text,
         h('label', { class: 'check' }, scope, 'Apply to all similar elements'),
         h('div', { class: 'row gap-2 end' },
@@ -155,7 +162,8 @@ export function mountNotes(ctx) {
     const save = async () => {
       const value = text.value.trim();
       if (!value) return;
-      if (value === n.text || await change({ op: 'edit', id: n.id, text: value })) pop.close();
+      const current = ctx.notes.find((x) => x.id === n.id);
+      if ((current && value === current.text) || await saveNoteText(n, value)) pop.close();
     };
     submitOnModEnter(text, save);
     const pop = openPopover({
@@ -192,28 +200,51 @@ export function mountNotes(ctx) {
     render();
   }
 
+  const noteFields = (n, text) => ({
+    aiId: n.aiId, targetTag: n.targetTag, targetText: n.targetText, scope: n.scope,
+    slide: n.slide, docX: n.docX, docY: n.docY, text,
+  });
+
+  function saveNoteText(n, value) {
+    const exists = ctx.notes.some((x) => x.id === n.id);
+    return exists ? change({ op: 'edit', id: n.id, text: value }) : change({ op: 'add', note: noteFields(n, value) });
+  }
+
   function startInlineEdit(n) {
     stopInlineEdit();
     const area = h('textarea', { class: 'textarea', rows: 3, 'aria-label': 'Edit note' });
     area.value = n.text;
+    const warn = h('p', { class: 'n-warn t-meta text-warning', hidden: true });
     const save = async () => {
       const value = area.value.trim();
       if (!value) return;
-      if (value === n.text) { stopInlineEdit(); return; }
-      if (await change({ op: 'edit', id: n.id, text: value })) stopInlineEdit();
+      const current = ctx.notes.find((x) => x.id === n.id);
+      if (current && value === current.text) { stopInlineEdit(); return; }
+      if (await saveNoteText(n, value)) stopInlineEdit();
     };
     submitOnModEnter(area, save);
     const el = h('div', { class: 'n-edit' },
+      warn,
       area,
       h('div', { class: 'row gap-2 end' },
         h('span', { class: 'grow t-meta' }, h('span', { class: 'kbd' }, `${MOD} Enter`)),
         h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: stopInlineEdit }, 'Cancel'),
         h('button', { type: 'button', class: 'btn btn-secondary btn-sm', onclick: save }, 'Save'),
       ));
-    inline = { id: n.id, el, popEscape: pushEscape(() => { stopInlineEdit(); return true; }) };
+    inline = { id: n.id, note: { ...n }, el, warn, popEscape: pushEscape(() => { stopInlineEdit(); return true; }) };
     render();
     area.focus();
     area.setSelectionRange(area.value.length, area.value.length);
+  }
+
+  function syncInlineWarning() {
+    if (!inline) return;
+    const current = ctx.notes.find((x) => x.id === inline.id);
+    const text = !current ? 'This note was deleted in another tab. Save to add it back.'
+      : current.text !== inline.note.text ? 'This note was changed in another tab. Saving replaces their version.'
+        : '';
+    inline.warn.textContent = text;
+    inline.warn.hidden = !text;
   }
 
   function noteActions(n) {
@@ -246,12 +277,15 @@ export function mountNotes(ctx) {
   }
 
   function render() {
-    if (inline && !ctx.notes.some((n) => n.id === inline.id)) { inline.popEscape(); inline = null; }
+    syncInlineWarning();
+    const ghost = inline && !ctx.notes.some((n) => n.id === inline.id) ? inline.note : null;
     count.textContent = ctx.notes.filter(isOpen).length;
-    if (!ctx.notes.length) {
-      list.replaceChildren(h('p', { class: 'notes-empty t-meta' }, 'No notes yet. Right-click anything on a slide to tell the AI what to change.'));
+    if (!ctx.notes.length && !ghost) {
+      list.replaceChildren(h('div', { class: 'notes-empty-state' },
+        h('span', { class: 'notes-empty-icon' }, icon('note')),
+        h('p', { class: 'notes-empty t-small text-muted' }, 'No notes yet. Right-click anything on a slide to tell the AI what to change.')));
     } else {
-      list.replaceChildren(...ctx.notes.map(card));
+      list.replaceChildren(...ctx.notes.map(card), ...(ghost ? [card(ghost, ctx.notes.length)] : []));
     }
     const tweaks = Object.keys(ctx.layoutTweaks || {}).length;
     tweaksLine.hidden = !tweaks;

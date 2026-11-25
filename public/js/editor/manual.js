@@ -42,6 +42,7 @@ export function createManual(ctx) {
     if (!ctx.canEdit()) return;
     select(t);
     e.preventDefault();
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement !== frameEl()) document.activeElement.blur();
     const tr = parseTranslate(t);
     drag = { t, x0: e.clientX, y0: e.clientY, tx0: tr.x, ty0: tr.y, moved: false, prevStyle: t.getAttribute('style') };
     const d = doc();
@@ -49,7 +50,8 @@ export function createManual(ctx) {
       const dx = ev.clientX - drag.x0, dy = ev.clientY - drag.y0;
       if (!drag.moved && Math.hypot(dx, dy) < 4) return;
       drag.moved = true;
-      drag.t.style.transform = `translate(${Math.round(drag.tx0 + dx)}px, ${Math.round(drag.ty0 + dy)}px)`;
+      drag.value = `${Math.round(drag.tx0 + dx)}px ${Math.round(drag.ty0 + dy)}px`;
+      drag.t.style.translate = drag.value;
     };
     const up = () => {
       d.removeEventListener('mousemove', move, true);
@@ -57,8 +59,8 @@ export function createManual(ctx) {
       const done = drag;
       drag = null;
       if (!done.moved) return;
-      if (!ctx.canEdit()) { setStyleAttr(done.t, done.prevStyle); return; }
-      saveStyle(done.t, done.prevStyle, { transform: done.t.style.transform });
+      if (!ctx.canFinish()) { setStyleAttr(done.t, done.prevStyle); return; }
+      saveStyle(done.t, done.prevStyle, { translate: done.value });
     };
     d.addEventListener('mousemove', move, true);
     d.addEventListener('mouseup', up, true);
@@ -88,24 +90,77 @@ export function createManual(ctx) {
     startEdit(t);
   }
 
+  function innerOf(t) {
+    const html = cleanInner(t);
+    return /^\s*<br\s*\/?>\s*$/i.test(html) ? '' : html;
+  }
+
+  function insertPlainText(text) {
+    const d = doc();
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    lines.forEach((line, i) => {
+      if (i) d.execCommand('insertLineBreak');
+      if (line) d.execCommand('insertText', false, line);
+    });
+  }
+
+  function onEditKeyDown(e) {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    if (e.shiftKey) doc().execCommand('insertLineBreak');
+    else e.currentTarget.blur();
+  }
+
+  function onEditPaste(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const data = e.clipboardData;
+    if (!data) return;
+    const image = [...data.items].find((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (image) {
+      const file = image.getAsFile();
+      if (file) fileToDeck(file);
+      return;
+    }
+    const text = data.getData('text/plain');
+    if (text) insertPlainText(text);
+  }
+
+  function onEditDrop(e) {
+    e.preventDefault();
+    const text = e.dataTransfer && e.dataTransfer.getData('text/plain');
+    if (text) insertPlainText(text);
+  }
+
   function startEdit(t) {
     clearSelection();
     ctx.editing = t;
-    const before = cleanInner(t);
+    const before = innerOf(t);
+    const startRev = ctx.rev;
     t.setAttribute('contenteditable', 'true');
     t.removeAttribute('data-dh-hover');
+    t.addEventListener('keydown', onEditKeyDown);
+    t.addEventListener('paste', onEditPaste);
+    t.addEventListener('drop', onEditDrop);
     t.focus();
     const popEscape = pushEscape(() => { t.blur(); return true; });
     const onBlur = () => {
       popEscape();
       t.removeEventListener('blur', onBlur);
+      t.removeEventListener('keydown', onEditKeyDown);
+      t.removeEventListener('paste', onEditPaste);
+      t.removeEventListener('drop', onEditDrop);
       t.removeAttribute('contenteditable');
       if (ctx.editing === t) ctx.editing = null;
-      const after = cleanInner(t);
-      if (after !== before && !ctx.canEdit()) {
+      const after = innerOf(t);
+      if (after !== cleanInner(t)) setInnerHtml(t, after);
+      if (after !== before && !ctx.canFinish()) {
         setInnerHtml(t, before);
       } else if (after !== before) {
-        saver.apply(() => ({ type: 'setInner', aiId: aiIdOf(t), tag: t.tagName.toLowerCase(), before, after }), {
+        saver.applyText(t, {
+          before,
+          after,
+          baseRev: startRev,
           rollback: () => setInnerHtml(t, before),
           undo: () => setInnerHtml(t, before),
           redo: () => setInnerHtml(t, after),
@@ -143,7 +198,7 @@ export function createManual(ctx) {
       window.removeEventListener('mouseup', up);
       iframe.style.pointerEvents = '';
       if (!changed) return;
-      if (!ctx.canEdit()) { setStyleAttr(img, prevStyle); return; }
+      if (!ctx.canFinish()) { setStyleAttr(img, prevStyle); return; }
       saveStyle(img, prevStyle, { width: img.style.width, height: img.style.height });
     };
     window.addEventListener('mousemove', move);
@@ -236,5 +291,18 @@ export function createManual(ctx) {
     });
   }
 
-  return { wire, select, clearSelection, startEdit, endEditing, startResize, addText, addImage, deleteSelected };
+  function onAppPaste(e) {
+    if (ctx.editing || !ctx.canEdit()) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        e.preventDefault();
+        fileToDeck(it.getAsFile());
+        return;
+      }
+    }
+  }
+
+  return { wire, select, clearSelection, startEdit, endEditing, startResize, addText, addImage, deleteSelected, onAppPaste, innerOf };
 }

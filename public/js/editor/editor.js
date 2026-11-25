@@ -16,6 +16,7 @@ const CONN_LABEL = { connecting: 'Connecting…', live: 'Live', reconnecting: 'R
 const CONN_DOT = { connecting: 'dot', live: 'dot dot-success', reconnecting: 'dot dot-warning' };
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const HINT_KEY = 'deckhand.hintDismissed';
+const READ_ONLY_BANNER = { tone: 'warning', icon: 'warning', text: "This file is read-only. You can browse it and copy prompts, but edits won't save." };
 
 export function createEditor({ onHome }) {
   let iframe = h('iframe', { id: 'deck', title: 'Deck' });
@@ -40,7 +41,7 @@ export function createEditor({ onHome }) {
     footer: h('div', { class: 'sb-foot' }),
   };
 
-  const state = { missing: false, closed: false, pendingScroll: null, pendingRev: 0, reloadWanted: null, reloadScheduled: false };
+  const state = { offline: false, missing: false, closed: false, pendingScroll: null, pendingRev: 0, reloadWanted: null, reloadScheduled: false };
 
   const ctx = {
     iframe,
@@ -56,12 +57,14 @@ export function createEditor({ onHome }) {
     selected: null,
     editing: null,
     locked: false,
-    canEdit: () => !!ctx.deck && !ctx.locked && !ctx.deck.readOnly && !state.missing && !state.closed,
+    canFinish: () => !!ctx.deck && !ctx.locked && !state.missing && !state.closed,
+    canEdit: () => ctx.canFinish() && !ctx.deck.readOnly && !state.offline,
     canChangeNotes: () => ctx.canEdit(),
     reload,
     editEnded,
     showMissing,
     showClosed,
+    showReadOnly,
     setLocked,
     flushSaves,
     goHome,
@@ -73,7 +76,8 @@ export function createEditor({ onHome }) {
   const homeButton = h('button', { type: 'button', class: 'btn btn-ghost btn-sm topbar-home', onclick: goHome }, '← Home');
   const topbar = h('header', { class: 'topbar' },
     homeButton,
-    deckName,
+    h('span', { class: 'topbar-sep', 'aria-hidden': 'true' }),
+    h('span', { class: 'topbar-deck' }, icon('deck', { size: 14 }), deckName),
     h('span', { class: 'grow' }),
     saver.el,
     slots.agent,
@@ -99,6 +103,8 @@ export function createEditor({ onHome }) {
 
   bindFrame(iframe);
   ctx.manual = createManual(ctx);
+  ctx.innerOf = (el) => ctx.manual.innerOf(el);
+  ctx.onAllSaved = () => { if (state.reloadWanted && !ctx.editing) reload('tab'); };
   ctx.notesApi = mountNotes(ctx);
   ctx.dock = createDock(ctx);
   ctx.runs = mountRuns(ctx);
@@ -125,7 +131,20 @@ export function createEditor({ onHome }) {
     root.classList.toggle('is-readonly', !!ctx.deck?.readOnly);
   }
 
-  const showConn = (s) => { connLabel.textContent = CONN_LABEL[s.conn] || ''; connDot.className = CONN_DOT[s.conn] || 'dot'; };
+  const showConn = (s) => {
+    connLabel.textContent = CONN_LABEL[s.conn] || '';
+    connDot.className = CONN_DOT[s.conn] || 'dot';
+    const offline = s.conn === 'reconnecting';
+    if (offline === state.offline) return;
+    state.offline = offline;
+    if (offline) {
+      ctx.selected = null;
+      ctx.notesApi.closePopovers();
+    }
+    setBanner('offline', offline ? { tone: 'info', icon: 'loader', text: 'Lost connection to Deckhand. Trying again…', spin: true } : null);
+    syncControls();
+    ctx.notesApi.render();
+  };
   store.subscribe(showConn);
   showConn(store.get());
 
@@ -182,6 +201,7 @@ export function createEditor({ onHome }) {
 
   function showElsewhere(deck, { onSwitch, onHome }) {
     state.closed = true;
+    state.elsewhere = true;
     ctx.manual.endEditing();
     ctx.selected = null;
     ctx.notesApi.closePopovers();
@@ -245,7 +265,7 @@ export function createEditor({ onHome }) {
     state.reloadScheduled = true;
     saver.flush().then(() => {
       state.reloadScheduled = false;
-      if (ctx.editing || !state.reloadWanted || !ctx.deck) return;
+      if (ctx.editing || !state.reloadWanted || !ctx.deck || saver.hasUnsaved()) return;
       const why = state.reloadWanted;
       state.reloadWanted = null;
       if (why.clear && saver.clearHistory()) toast('Undo history cleared');
@@ -290,6 +310,7 @@ export function createEditor({ onHome }) {
     const t = e.target;
     if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"], .dialog-scrim, .popover')) return;
     if (document.querySelector('.dialog-scrim')) return;
+    if (t && t.ownerDocument === document && t !== document.body && t !== iframe) return;
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
     if (mod && key === 'z') {
@@ -306,6 +327,12 @@ export function createEditor({ onHome }) {
     }
   }
   document.addEventListener('keydown', onKey);
+  document.addEventListener('paste', (e) => {
+    if (root.hidden || document.querySelector('.dialog-scrim')) return;
+    const t = document.activeElement;
+    if (t && t !== document.body && t !== iframe && t.closest('input, textarea, select, [contenteditable="true"], .popover')) return;
+    ctx.manual.onAppPaste(e);
+  });
 
   pushEscape(() => {
     if (root.hidden || !ctx.selected) return false;
@@ -346,9 +373,47 @@ export function createEditor({ onHome }) {
     bindFrame(next);
   }
 
+  function updateMeta(deck) {
+    const wasReadOnly = !!ctx.deck?.readOnly;
+    ctx.deck = { ...ctx.deck, ...deck };
+    store.set({ deck: ctx.deck });
+    setBanner('readonly', ctx.deck.readOnly ? READ_ONLY_BANNER : null);
+    syncControls();
+    ctx.notesApi.render();
+    if (wasReadOnly && !ctx.deck.readOnly && saver.hasUnsaved()) saver.retry();
+  }
+
+  function showReadOnly() {
+    if (ctx.deck) ctx.deck = { ...ctx.deck, readOnly: true };
+    setBanner('readonly', READ_ONLY_BANNER);
+    syncControls();
+  }
+
+  function reattach(deck) {
+    ctx.deck = deck;
+    ctx.rev = deck.rev ?? 0;
+    state.pendingRev = 0;
+    state.missing = !!deck.missing;
+    state.closed = false;
+    state.elsewhere = false;
+    setPaused(false);
+    saver.clearHistory();
+    store.set({ deck });
+    for (const key of ['closed', 'missing']) setBanner(key, null);
+    syncControls();
+    ctx.notesApi.load();
+    state.reloadWanted = { toast: false, clear: true };
+    saver.retry();
+  }
+
   function open(deck, { slide, paused } = {}) {
     ctx.manual.endEditing();
+    if (!paused && ctx.deck && ctx.deck.path === deck.path && !root.hidden && saver.hasUnsaved()) {
+      reattach(deck);
+      return;
+    }
     if (ctx.deck) freshFrame();
+    state.elsewhere = false;
     ctx.deck = deck;
     ctx.rev = deck.rev ?? 0;
     state.pendingRev = 0;
@@ -357,12 +422,14 @@ export function createEditor({ onHome }) {
     state.reloadWanted = null;
     setPaused(false);
     saver.clearHistory();
+    saver.reset();
     store.set({ deck });
     deckName.textContent = deck.name;
     deckName.title = deck.path;
     document.title = `${deck.name} · Deckhand`;
     bannerMap.clear();
-    setBanner('readonly', deck.readOnly ? { tone: 'warning', icon: 'warning', text: "This file is read-only. You can browse it and copy prompts, but edits won't save." } : null);
+    if (state.offline) bannerMap.set('offline', { tone: 'info', icon: 'loader', text: 'Lost connection to Deckhand. Trying again…' });
+    setBanner('readonly', deck.readOnly ? READ_ONLY_BANNER : null);
     if (state.missing) showMissing();
     syncControls();
     root.hidden = false;
@@ -381,7 +448,14 @@ export function createEditor({ onHome }) {
     stage,
     get visible() { return !root.hidden; },
     get deck() { return ctx.deck; },
+    get paused() { return !!state.elsewhere; },
     open,
+    reopen,
+    updateMeta,
+    reconnected() {
+      if (saver.hasUnsaved()) saver.retry();
+      else reload('tab');
+    },
     showClosed,
     showElsewhere,
     hide() {
