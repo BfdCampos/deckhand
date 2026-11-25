@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
-import { startDeckhand, tempDir, makeDeck, makeBin, request, postJson, pidAlive, waitFor } from './support/deckhand-process.js';
+import { startDeckhand } from '../helpers/deckhand.js';
+import { request, postJson } from '../helpers/http.js';
+import { tempDir, makeDeck, makeBin, pidAlive, waitFor } from '../helpers/util.js';
 
 function occupy(port) {
   return new Promise((resolve) => {
@@ -33,7 +35,7 @@ setInterval(() => {}, 1000);
 describe('launch', () => {
   test('AC-1 serves Home within 3 s and prints the launch lines', async () => {
     const t0 = Date.now();
-    const srv = await startDeckhand();
+    const srv = await startDeckhand({ agents: [] });
     try {
       const res = await request(srv.port, { path: '/' });
       assert.equal(res.status, 200);
@@ -62,7 +64,7 @@ describe('launch', () => {
   test('finds claude in DECKHAND_EXTRA_BIN_DIRS', async () => {
     const root = await tempDir();
     const extra = await makeBin(path.join(root, 'extra'), { claude: 'process.exit(0)' });
-    const srv = await startDeckhand({ env: { DECKHAND_EXTRA_BIN_DIRS: extra } });
+    const srv = await startDeckhand({ agents: [], env: { DECKHAND_EXTRA_BIN_DIRS: extra } });
     try {
       assert.match(srv.stdout(), /^\s*Agent: Claude Code$/m);
     } finally {

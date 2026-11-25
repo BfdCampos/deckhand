@@ -5,7 +5,9 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
-import { startDeckhand, tempDir, makeDeck, makeBin, request, postJson, exists } from './support/deckhand-process.js';
+import { startDeckhand } from '../helpers/deckhand.js';
+import { request, postJson } from '../helpers/http.js';
+import { tempDir, makeDeck, makeBin, exists } from '../helpers/util.js';
 
 const EVIL = 'https://evil.example';
 

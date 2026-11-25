@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { startDeckhand, tempDir, makeDeck, request } from './support/deckhand-process.js';
+import { startDeckhand } from '../helpers/deckhand.js';
+import { request } from '../helpers/http.js';
+import { tempDir, makeDeck } from '../helpers/util.js';
 
 const MB = 1024 * 1024;
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
