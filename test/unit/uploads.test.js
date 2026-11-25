@@ -134,6 +134,16 @@ describe('uploads', () => {
     assert.deepEqual(await listAssets(), before);
   });
 
+  test('n11 oversize uploads always get a readable 413, never a reset', async () => {
+    const body = Buffer.concat([PNG, Buffer.alloc(21 * MB - PNG.length)]);
+    for (let i = 0; i < 6; i++) {
+      const withLength = await upload(srv.port, body, { name: 'huge.png' });
+      assert.equal(withLength.status, 413, `with length, try ${i}`);
+      const streamed = await chunkedUpload(srv.port, 21 * MB, 256 * 1024);
+      assert.equal(streamed.status, 413, `streamed, try ${i}`);
+    }
+  });
+
   test('exactly 20 MB is accepted', async () => {
     const body = Buffer.concat([PNG, Buffer.alloc(20 * MB - PNG.length)]);
     const res = await upload(srv.port, body, { name: 'edge.png' });

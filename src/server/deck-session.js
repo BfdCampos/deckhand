@@ -11,6 +11,8 @@ import { anchorSource, indexSource, planOp, applySplices, invertSplices, rebaseR
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const MAX_JOURNAL = 500;
 const DEBOUNCE_MS = 100;
+const POLL_MS = 250;
+const RECHECK_MS = 150;
 
 const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer open.');
 const cannotUndo = () => new HttpError(409, 'cannot_undo', "That can't be undone any more.");
@@ -27,6 +29,8 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   let deck = null;
   let watcher = null;
   let debounce = null;
+  let recheck = null;
+  let polled = null;
   let locked = null;
   let mods = [];
   let journal = [];
@@ -96,6 +100,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       await fsp.rm(tmp, { force: true }).catch(() => {});
       throw new HttpError(500, 'write_failed', "Couldn't save the deck.");
     }
+    scheduleRecheck();
   }
 
   function checkDisk() {
@@ -119,8 +124,21 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
 
   async function stopWatching() {
     clearTimeout(debounce);
+    clearTimeout(recheck);
+    if (polled) fs.unwatchFile(polled.file, polled.listener);
+    polled = null;
     if (watcher) await watcher.close().catch(() => {});
     watcher = null;
+  }
+
+  function scheduleCheck(ms) {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => checkDisk().catch((e) => console.error('[deckhand] deck check failed:', e.message)), ms);
+  }
+
+  function scheduleRecheck() {
+    clearTimeout(recheck);
+    recheck = setTimeout(() => checkDisk().catch((e) => console.error('[deckhand] deck check failed:', e.message)), RECHECK_MS);
   }
 
   function startWatching() {
@@ -132,11 +150,11 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       ignored: (p) => p !== dir && p !== file,
     });
     const onEvent = (p) => {
-      if (p !== file) return;
-      clearTimeout(debounce);
-      debounce = setTimeout(() => checkDisk().catch((e) => console.error('[deckhand] deck check failed:', e.message)), DEBOUNCE_MS);
+      if (p === file) scheduleCheck(DEBOUNCE_MS);
     };
     watcher.on('add', onEvent).on('change', onEvent).on('unlink', onEvent).on('error', () => {});
+    polled = { file, listener: () => scheduleCheck(DEBOUNCE_MS) };
+    fs.watchFile(file, { interval: POLL_MS, persistent: false }, polled.listener);
     return new Promise((resolve) => {
       const timer = setTimeout(resolve, 2000);
       watcher.once('ready', () => { clearTimeout(timer); resolve(); });
@@ -238,19 +256,31 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
         entries.push({ opId, tabId, applied: next.applied, tweak: plan.tweak || null });
       }
       if (!entries.length) return { rev: deck.rev, results };
-      await writeDisk(source);
+      const journalled = [];
+      const tweaked = [];
+      for (const e of entries) {
+        const entry = { opId: e.opId, tabId: e.tabId, mod: null, undoMod: null, undone: false, tweak: e.tweak, tweakBefore: null, tweakAfter: null };
+        if (e.tweak && notes) {
+          entry.tweakBefore = notes.tweaks()[e.tweak.aiId] ?? null;
+          entry.tweakAfter = mergeTweak(entry.tweakBefore, e.tweak);
+          tweaked.unshift(entry);
+          await updateTweak(e.tweak, entry.tweakAfter);
+        }
+        journalled.push({ entry, applied: e.applied });
+      }
+      try {
+        await writeDisk(source);
+      } catch (err) {
+        for (const entry of tweaked) await updateTweak(entry.tweak, entry.tweakBefore);
+        throw err;
+      }
       deck.source = source;
       deck.index = index;
       deck.anchorsFlushed = true;
       deck.rev++;
-      for (const e of entries) {
-        mods.push({ splices: e.applied, inverseOf: null });
-        const entry = { opId: e.opId, tabId: e.tabId, mod: mods.length - 1, undoMod: null, undone: false, tweak: e.tweak, tweakBefore: null, tweakAfter: null };
-        if (e.tweak && notes) {
-          entry.tweakBefore = notes.tweaks()[e.tweak.aiId] ?? null;
-          entry.tweakAfter = mergeTweak(entry.tweakBefore, e.tweak);
-          await updateTweak(e.tweak, entry.tweakAfter);
-        }
+      for (const { entry, applied } of journalled) {
+        mods.push({ splices: applied, inverseOf: null });
+        entry.mod = mods.length - 1;
         pushJournal(entry);
       }
       broadcast({ type: 'deck-changed', deckId: deck.deckId, rev: deck.rev, source: 'tab', byTab: tabId });
@@ -283,7 +313,13 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       const next = applySplices(deck.source, ranges.map((r) => ({ start: r.start, end: r.end, text: r.text })));
       const nextIndex = indexSource(next.source);
       if (nextIndex.duplicates.length) throw cannotUndo();
-      await writeDisk(next.source);
+      await updateTweak(entry.tweak, undoing ? entry.tweakBefore : entry.tweakAfter);
+      try {
+        await writeDisk(next.source);
+      } catch (err) {
+        await updateTweak(entry.tweak, undoing ? entry.tweakAfter : entry.tweakBefore);
+        throw err;
+      }
       deck.source = next.source;
       deck.index = nextIndex;
       deck.rev++;
@@ -291,7 +327,6 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       if (undoing) entry.undoMod = mods.length - 1;
       else entry.mod = mods.length - 1;
       entry.undone = undoing;
-      await updateTweak(entry.tweak, undoing ? entry.tweakBefore : entry.tweakAfter);
       broadcast({ type: 'deck-changed', deckId: deck.deckId, rev: deck.rev, source: 'tab', byTab: tabId });
       return { rev: deck.rev };
     });
@@ -315,6 +350,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       await fsp.chmod(tmp, deck.mode);
       await fsp.rename(tmp, deck.path);
       adopt(data, source);
+      scheduleRecheck();
     });
   }
 
