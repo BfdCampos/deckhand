@@ -1,6 +1,6 @@
 import { h } from '../dom.js';
 import { icon } from './icons.js';
-import { ensureStylesheet, formatElapsed } from './util.js';
+import { formatElapsed } from './util.js';
 
 const KIND_ICON = {
   read: 'eye',
@@ -34,7 +34,6 @@ const FALLBACK_TEXT = {
 const STICK_PX = 24;
 
 export function createActivityCard() {
-  ensureStylesheet('/css/runs.css');
 
   const label = h('span', { class: 'activity-label truncate' });
   const state = h('span', { class: 'activity-state' });

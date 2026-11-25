@@ -51,11 +51,6 @@ export function focusables(root) {
   return [...root.querySelectorAll(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
 }
 
-export function ensureStylesheet(href) {
-  if (document.querySelector(`link[rel="stylesheet"][href="${href}"]`)) return;
-  document.head.append(el('link', { rel: 'stylesheet', href }));
-}
-
 export function formatElapsed(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(total / 3600);

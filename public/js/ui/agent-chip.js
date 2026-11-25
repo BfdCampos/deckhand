@@ -4,7 +4,6 @@ import { store } from '../store.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
 import { openPopover, openMenu } from './popover.js';
-import { ensureStylesheet } from './util.js';
 
 const DOCS = {
   claude: { name: 'Claude Code', docsUrl: 'https://docs.claude.com/en/docs/claude-code/setup' },
@@ -66,7 +65,6 @@ function foundMessage(agents) {
 }
 
 export function createAgentChip() {
-  ensureStylesheet('/css/runs.css');
   syncFromEvents();
 
   const dot = h('span', { class: 'dot' });
