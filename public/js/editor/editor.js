@@ -260,6 +260,7 @@ export function createEditor({ onHome }) {
     const wanted = state.reloadWanted || { toast: false, clear: false };
     if (reason === 'external') wanted.toast = true;
     if (reason !== 'tab') wanted.clear = true;
+    if (reason === 'agent' || reason === 'revert' || ctx.locked) wanted.quiet = true;
     state.reloadWanted = wanted;
     if (ctx.editing || state.reloadScheduled) return;
     state.reloadScheduled = true;
@@ -268,7 +269,7 @@ export function createEditor({ onHome }) {
       if (ctx.editing || !state.reloadWanted || !ctx.deck || saver.hasUnsaved()) return;
       const why = state.reloadWanted;
       state.reloadWanted = null;
-      if (why.clear && saver.clearHistory()) toast('Undo history cleared');
+      if (why.clear && saver.clearHistory() && !why.quiet) toast('Undo history cleared');
       if (why.toast) toast('Updated from disk');
       loadFrame(captureScroll());
     });

@@ -45,7 +45,8 @@ export function mountNotes(ctx) {
   const count = h('span', { class: 'pill-count' }, '0');
   const list = h('div', { class: 'notes-list' });
   const tweaksLine = h('div', { class: 'notes-tweaks t-meta', hidden: true });
-  ctx.slots.notes.append(h('div', { class: 'sb-title' }, h('span', { class: 't-label' }, 'Notes for the AI'), count), list, tweaksLine);
+  const clearDone = h('button', { type: 'button', class: 'link notes-clear-done', hidden: true, onclick: () => clearDoneNotes() });
+  ctx.slots.notes.append(h('div', { class: 'sb-title' }, h('span', { class: 't-label' }, 'Notes for the AI'), count, h('span', { class: 'grow' }), clearDone), list, tweaksLine);
 
   ctx.notes = [];
   ctx.layoutTweaks = {};
@@ -256,7 +257,7 @@ export function mountNotes(ctx) {
       isOpen(n) ? h('div', { class: 'btn-group' },
         h('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: disabled || !ctx.runs?.runNote, onclick: () => ctx.runs.runNote(n) }, icon('play', { size: 14 }), 'Run'),
         h('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled, onclick: () => startInlineEdit(n) }, icon('pencil', { size: 14 }), 'Edit'),
-      ) : h('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled, onclick: () => startInlineEdit(n) }, icon('pencil', { size: 14 }), 'Edit'),
+      ) : null,
       h('button', { type: 'button', class: 'btn btn-sm btn-ghost', disabled, onclick: () => remove(n) }, 'Delete'),
     ];
   }
@@ -290,7 +291,17 @@ export function mountNotes(ctx) {
     const tweaks = Object.keys(ctx.layoutTweaks || {}).length;
     tweaksLine.hidden = !tweaks;
     tweaksLine.textContent = tweaks === 1 ? '1 layout tweak will go with the hand-off' : `${tweaks} layout tweaks will go with the hand-off`;
+    const done = ctx.notes.filter((n) => !isOpen(n)).length;
+    clearDone.hidden = !done;
+    clearDone.disabled = !canChange();
+    clearDone.textContent = `Clear done (${done})`;
     ctx.notesChanged?.();
+  }
+
+  async function clearDoneNotes() {
+    for (const n of ctx.notes.filter((x) => !isOpen(x))) {
+      if (!(await change({ op: 'delete', id: n.id }))) return;
+    }
   }
 
   function closePopovers() {

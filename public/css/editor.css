@@ -94,3 +94,6 @@
 .editor-elsewhere-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
 .banner .icon-loader { animation: ui-spin 1.2s linear infinite; }
 .n-warn { margin: 0; }
+.editor.is-locked .stage .toast-region { top: 60px; }
+.notes-clear-done { font-size: var(--fs-12); }
+.notes-clear-done:disabled { color: var(--muted); cursor: default; text-decoration: none; }
