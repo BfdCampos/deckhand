@@ -62,3 +62,32 @@ test('names never end on a pronoun or a little joining word', () => {
     assert.ok(!endings.has(last), `${d} -> ${slugify(d)}`);
   }
 });
+
+test('the subject survives leading meta phrases', () => {
+  const table = [
+    ['A 3-slide deck that explains how our book club works', 'how-book-club-works'],
+    ['Make me a 6-slide pitch for our new coffee subscription, warm and minimal, for the leadership team', 'pitch-new-coffee-subscription-warm-minimal'],
+    ['A weekly team update for the platform squad: wins, risks and next steps', 'weekly-team-update-platform-squad-wins'],
+    ['A 20-minute talk on observability for frontend engineers', '20-minute-observability-frontend-engineers'],
+    ['Onboarding deck for new joiners in the data team', 'onboarding-deck-new-joiners-data-team'],
+    ['Q3 quarterly review for the board, with revenue, churn and hiring', 'q3-quarterly-review-board-revenue-churn'],
+    ['Slides for a half-day workshop on writing good SQL', 'half-day-workshop-writing-good-sql'],
+    ['A presentation introducing our new design system', 'new-design-system'],
+    ['Five slides explaining why we switched to Postgres', 'why-we-switched-postgres'],
+    ['Create a deck about our 2027 hiring plan', '2027-hiring-plan'],
+    ['Talk for a meetup: lessons from running Kafka in production', 'meetup-lessons-from-running-kafka-production'],
+    ['An all-hands update on the product roadmap', 'all-hands-update-product-roadmap'],
+    ['Customer case study deck for Acme Corp', 'customer-case-study-deck-acme-corp'],
+    ['A short deck showing the results of our pricing experiment', 'results-pricing-experiment'],
+    ['Investor pitch for a seed round, 10 slides', 'investor-pitch-seed-round'],
+    ['Please build a 4-slide deck that covers our Q4 OKRs', 'q4-okrs'],
+    ['Team update', 'team-update'],
+    ['Quarterly business review for Q1 2027', 'quarterly-business-review-q1-2027'],
+  ];
+  for (const [description, expected] of table) assert.equal(slugify(description), expected, description);
+});
+
+test('a description that is only about the deck itself is named deck', () => {
+  for (const d of ['A presentation', 'a 5 slide deck', 'Slides', 'A short deck that explains']) assert.equal(slugify(d), 'deck', d);
+  assert.equal(uniqueDeckName(slugify('A presentation'), (n) => n === 'deck.html'), 'deck-2.html');
+});
