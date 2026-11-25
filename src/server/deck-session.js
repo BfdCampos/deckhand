@@ -254,11 +254,14 @@ export function createDeckSession({ hub, store = null, notes = null }) {
       for (const op of ops) {
         const opId = typeof op?.opId === 'string' && op.opId.length <= 80 ? op.opId : crypto.randomUUID();
         const plan = planOp(index, op, { nextId: () => `dh${++maxN}` });
-        results.push({ opId, ...plan.result });
-        if (!plan.splices.length) continue;
+        if (!plan.splices.length) {
+          results.push({ opId, ...plan.result });
+          continue;
+        }
         const next = applySplices(source, plan.splices);
         const nextIndex = indexSource(next.source);
         plan.verify(nextIndex);
+        results.push({ opId, ...plan.result });
         source = next.source;
         index = nextIndex;
         maxN = Math.max(maxN, index.maxN);

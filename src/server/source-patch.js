@@ -378,13 +378,15 @@ function planSetStyle(index, op) {
     const at = info.attrs['data-ai-id']?.endOffset ?? info.tagNameEnd;
     splice = value ? { start: at, end: at, text: ` style="${value}"` } : null;
   }
+  const result = { aiId: info.aiId, style: attrValue(info.node, 'style') ?? '' };
   return {
     splices: splice && splice.text !== src.slice(splice.start, splice.end) ? [splice] : [],
-    result: { aiId: info.aiId },
+    result,
     tweak: { aiId: info.aiId, ...tweakFromProps(info.tag, clean) },
     verify(newIdx) {
       if (newIdx.ids.get(info.aiId) !== info.tag) throw badOp('That change would break the deck structure.');
       verifyStable(index, newIdx);
+      result.style = attrValue(newIdx.get(info.aiId).node, 'style') ?? '';
     },
   };
 }
