@@ -6,7 +6,7 @@ const notImage = () => new HttpError(415, 'not_image', 'That file is not an imag
 
 export function createAssets({ session }) {
   async function upload({ req }) {
-    const deckDir = session.state.deckDir;
+    const deckDir = session.meta()?.dir;
     if (!deckDir) throw new HttpError(409, 'deck_closed', 'No deck is open.');
     const type = String(req.headers['content-type'] || '').toLowerCase();
     if (!type.startsWith('image/')) throw notImage();
