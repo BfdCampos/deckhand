@@ -45,7 +45,14 @@ export async function expectSaved(page) {
 }
 
 export async function diskEventually(file, check, timeout = 3_000) {
-  await expect.poll(async () => check(await readDisk(file)), { timeout }).toBe(true);
+  await expect.poll(async () => {
+    try {
+      return check(await readDisk(file));
+    } catch (e) {
+      if (e.code === 'ENOENT') return false;
+      throw e;
+    }
+  }, { timeout }).toBe(true);
 }
 
 export async function blurEditing(page) {
