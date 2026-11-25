@@ -148,6 +148,24 @@ describe('deck-session ops', () => {
     assert.match(await fsp.readFile(s.file.replace('.html', '.deckhand.md'), 'utf8'), new RegExp(`- ${p} \\(p\\): moved by \\(100, 0\\) px`));
   });
 
+  test('the work order has the tweak before the deck shows the move, and a failed save rolls it back', async () => {
+    const seen = [];
+    const md = s.file.replace('.html', '.deckhand.md');
+    const watcher = fs.watch(s.dir, (_e, name) => {
+      if (name === 'deck.html' && fs.readFileSync(s.file, 'utf8').includes('translate(30px, 0px)')) seen.push(fs.existsSync(md) && fs.readFileSync(md, 'utf8').includes('moved by (30, 0) px'));
+    });
+    await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(30px, 0px)' } }]);
+    await sleep(100);
+    watcher.close();
+    assert.ok(seen.length && seen.every(Boolean), JSON.stringify(seen));
+
+    await fsp.mkdir(s.file + '.deckhand-tmp');
+    await assert.rejects(apply([{ type: 'setStyle', aiId: img, tag: 'img', props: { width: '50px', height: '50px' } }]), (e) => e.code === 'write_failed');
+    assert.equal(s.notes.tweaks()[img], undefined);
+    assert.ok(!(await fsp.readFile(md, 'utf8')).includes(`${img} (img)`));
+    await fsp.rm(s.file + '.deckhand-tmp', { recursive: true });
+  });
+
   test('insert returns the new anchor and the batch is atomic', async () => {
     const res = await apply([{ opId: 'a', type: 'insert', parentAiId: section, html: '<p class="dh-text">New text</p>' }]);
     const newId = res.results[0].aiId;
