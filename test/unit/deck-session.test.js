@@ -328,7 +328,7 @@ describe('deck-session ops', () => {
     const ev = await waitFor(() => s.events.find((e) => e.type === 'deck-changed' && e.source === 'external'));
     assert.ok(ev.rev > staleRev);
     assert.match(s.session.servedSource(), /<h1 data-ai-id="dh\d+">From the editor<\/h1>/);
-    await assert.rejects(apply([{ type: 'remove', aiId: p, tag: 'p' }], 't1', staleRev), (e) => e.status === 409 && e.code === 'deck_changed');
+    await assert.rejects(apply([{ type: 'remove', aiId: h1, tag: 'h1' }], 't1', staleRev), (e) => e.status === 409 && e.code === 'deck_changed');
     await assert.rejects(s.session.undo(meta.deckId, 't1', 'one'), (e) => e.code === 'cannot_undo');
     const fresh = idOf(s.session.servedSource(), /<p data-ai-id="(dh\d+)">/);
     await apply([{ type: 'remove', aiId: fresh, tag: 'p' }], 't1', ev.rev);
