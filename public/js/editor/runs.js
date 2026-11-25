@@ -137,13 +137,17 @@ export function mountRuns(ctx) {
     let summary = null;
     if (run.reverted) summary = run.kind === 'create' ? 'Deleted. The deck is gone and your description is back on Home.' : 'Reverted. The deck and notes are back how they were before this run.';
     else if (run.status === 'succeeded') {
-      if (run.summary && typeof run.summary.total === 'number') summary = `Applied ${run.summary.applied} of ${plural(run.summary.total, 'note', 'notes')}.`;
+      if (run.kind === 'create') summary = 'Deck created.';
+      else if (run.summary && typeof run.summary.total === 'number') summary = `Applied ${run.summary.applied} of ${plural(run.summary.total, 'note', 'notes')}.`;
       else summary = run.kind === 'create' ? 'Deck created.' : 'Done.';
     } else if (run.status === 'stopped') summary = 'Stopped. Any edits it already made are still in the file.';
     card.setSummary(summary);
     card.setError(run.status === 'failed' ? trimError(run.error || 'The agent stopped without saying why.') : null);
 
+    const quiet = run.kind === 'create' && run.status === 'succeeded' && !run.reverted && store.get().justCreated !== run.id;
+    card.el.classList.toggle('is-quiet', quiet);
     const actions = [];
+    if (quiet) { card.setActions(actions); return; }
     if (run.status !== 'running' && run.canRevert && !run.reverted) {
       actions.push(run.kind === 'create'
         ? { label: 'Delete this deck', icon: 'trash', onClick: confirmRevert }
@@ -208,8 +212,20 @@ export function mountRuns(ctx) {
     return note && (note.status || 'open') !== 'done' ? 'Still open' : null;
   }
 
+  let notesSeen = null;
+  function settleCreate() {
+    if (!store.get().justCreated) return;
+    store.set({ justCreated: null });
+    renderCard();
+  }
+  onEvent((m) => { if (m.type === 'deck-changed' && m.source === 'tab') settleCreate(); });
+  new MutationObserver(() => { if (ctx.root?.hidden) settleCreate(); }).observe(ctx.root || document.body, { attributes: true, attributeFilter: ['hidden'] });
+
   let queued = false;
   ctx.notesChanged = () => {
+    const count = (ctx.notes || []).length;
+    if (notesSeen !== null && count > notesSeen) settleCreate();
+    notesSeen = count;
     if (queued) return;
     queued = true;
     queueMicrotask(() => {
