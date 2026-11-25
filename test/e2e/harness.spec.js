@@ -60,3 +60,36 @@ test.describe('expected API errors', () => {
     await page.waitForTimeout(100);
   });
 });
+
+test.describe('option shapes', () => {
+  test.describe('several allowed messages, wrapped once', () => {
+    test.use({ allowedConsoleErrors: [[/first noise/, /second noise/]] });
+
+    test('every pattern in the list is honoured', async ({ page, deckhand }) => {
+      await page.goto(deckhand.url + '/');
+      await page.evaluate(() => { console.error('the first noise'); console.error('the second noise'); });
+    });
+  });
+
+  test.describe('a single bare pattern', () => {
+    test.use({ allowedConsoleErrors: /lonely noise/ });
+
+    test('is accepted too', async ({ page, deckhand }) => {
+      await page.goto(deckhand.url + '/');
+      await page.evaluate(() => console.error('some lonely noise'));
+    });
+  });
+
+  test.describe('several expected API errors, wrapped once', () => {
+    test.use({ expectedApiErrors: [[{ path: '/api/runs/run_a/stop', status: 409 }, { path: '/api/runs/run_b/revert', status: 409 }]] });
+
+    test('every entry is honoured', async ({ page, deckhand }) => {
+      await page.goto(deckhand.url + '/');
+      await page.evaluate(async () => {
+        const post = (p) => fetch(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        await post('/api/runs/run_a/stop');
+        await post('/api/runs/run_b/revert');
+      });
+    });
+  });
+});
