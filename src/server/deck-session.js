@@ -313,7 +313,13 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       const next = applySplices(deck.source, ranges.map((r) => ({ start: r.start, end: r.end, text: r.text })));
       const nextIndex = indexSource(next.source);
       if (nextIndex.duplicates.length) throw cannotUndo();
-      await writeDisk(next.source);
+      await updateTweak(entry.tweak, undoing ? entry.tweakBefore : entry.tweakAfter);
+      try {
+        await writeDisk(next.source);
+      } catch (err) {
+        await updateTweak(entry.tweak, undoing ? entry.tweakAfter : entry.tweakBefore);
+        throw err;
+      }
       deck.source = next.source;
       deck.index = nextIndex;
       deck.rev++;
@@ -321,7 +327,6 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       if (undoing) entry.undoMod = mods.length - 1;
       else entry.mod = mods.length - 1;
       entry.undone = undoing;
-      await updateTweak(entry.tweak, undoing ? entry.tweakBefore : entry.tweakAfter);
       broadcast({ type: 'deck-changed', deckId: deck.deckId, rev: deck.rev, source: 'tab', byTab: tabId });
       return { rev: deck.rev };
     });
