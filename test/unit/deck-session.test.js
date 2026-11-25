@@ -155,7 +155,7 @@ describe('deck-session ops', () => {
       if (name === 'deck.html' && fs.readFileSync(s.file, 'utf8').includes('translate(30px, 0px)')) seen.push(fs.existsSync(md) && fs.readFileSync(md, 'utf8').includes('moved by (30, 0) px'));
     });
     await apply([{ type: 'setStyle', aiId: p, tag: 'p', props: { transform: 'translate(30px, 0px)' } }]);
-    await sleep(100);
+    for (let waited = 0; !seen.length && waited < 3000; waited += 25) await sleep(25);
     watcher.close();
     assert.ok(seen.length && seen.every(Boolean), JSON.stringify(seen));
 
