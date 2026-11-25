@@ -386,9 +386,9 @@ describe('B3 minimal text edits keep every untouched byte', () => {
   }
 
   const cases = [
-    ['an entity-heavy heading, with Chrome turning the typed space into nbsp', /<h1 data-ai-id="(dh\d+)"/, 'Fish &amp; Chips &nbsp;— café', 'Fish &amp; Chips &nbsp;— café&nbsp;X', (s) => s.replace('caf&eacute;</h1>', 'caf&eacute; X</h1>')],
-    ['the same heading with a plain typed space', /<h1 data-ai-id="(dh\d+)"/, 'Fish &amp; Chips &nbsp;— café', 'Fish &amp; Chips &nbsp;— café X', (s) => s.replace('caf&eacute;</h1>', 'caf&eacute; X</h1>')],
-    ['entities, an emoji and <br/> around a one-word change', /<p data-ai-id="(dh\d+)" id="ent"/, 'It’s © 2026 &lt;tag&gt; \u{1F41F} emoji<br>second line', 'It’s © 2026 &lt;tag&gt; \u{1F41F} fish<br>second line', (s) => s.replace('emoji<br/>', 'fish<br/>')],
+    ['an entity-heavy heading, with Chrome turning the typed space into nbsp', /<h1 data-ai-id="(dh\d+)"/, 'Fish &amp; Chips &nbsp;\u2014 café', 'Fish &amp; Chips &nbsp;\u2014 café&nbsp;X', (s) => s.replace('caf&eacute;</h1>', 'caf&eacute; X</h1>')],
+    ['the same heading with a plain typed space', /<h1 data-ai-id="(dh\d+)"/, 'Fish &amp; Chips &nbsp;\u2014 café', 'Fish &amp; Chips &nbsp;\u2014 café X', (s) => s.replace('caf&eacute;</h1>', 'caf&eacute; X</h1>')],
+    ['entities, an emoji and <br/> around a one-word change', /<p data-ai-id="(dh\d+)" id="ent"/, 'It\u2019s © 2026 &lt;tag&gt; \u{1F41F} emoji<br>second line', 'It\u2019s © 2026 &lt;tag&gt; \u{1F41F} fish<br>second line', (s) => s.replace('emoji<br/>', 'fish<br/>')],
     ['an implied-end li whose trailing newline the browser dropped', /<li data-ai-id="(dh\d+)">One/, 'One\n    ', 'Uno', (s) => s.replace('<li data-ai-id="dh5">One\n', '<li data-ai-id="dh5">Uno\n')],
     ['an uppercase end tag next to a space Chrome made nbsp', /<li data-ai-id="(dh\d+)">Two/, 'Two <b>bold</b>\n    ', 'Dos&nbsp;<b>bold</b>\n    ', (s) => s.replace('>Two <b>bold</B>', '>Dos <b>bold</B>')],
     ['a text change inside an uppercase element', /<li data-ai-id="(dh\d+)">Two/, 'Two <b>bold</b>\n    ', 'Two <b>bolder</b>\n    ', (s) => s.replace('<b>bold</B>', '<b>bolder</B>')],
