@@ -41,7 +41,9 @@
 .note-item .n-top { display: flex; justify-content: space-between; gap: var(--space-2); align-items: center; margin-bottom: 6px; }
 .note-item .n-text { line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .note-item .n-actions { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
-.note-item.is-done { opacity: 0.72; }
+.note-item.is-done { background: var(--panel); border-color: var(--line-soft); box-shadow: none; }
+.note-item.is-done .badge { background: var(--hover); color: var(--ink-2); }
+.note-item.is-done .n-text { color: var(--ink-2); }
 .note-item .n-top .tag { flex: none; }
 .n-edit { display: flex; flex-direction: column; gap: var(--space-2); }
 .n-run { display: inline-flex; align-items: center; gap: var(--space-2); }
@@ -91,3 +93,4 @@
 .editor-elsewhere-text { font-size: var(--fs-16); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
 .editor-elsewhere-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
 .banner .icon-loader { animation: ui-spin 1.2s linear infinite; }
+.n-warn { margin: 0; }
