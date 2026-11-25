@@ -94,5 +94,5 @@ test('a deck closed in another tab offers Reopen and Home', async ({ page, deckh
   await page.request.post(`${deckhand.url}/api/deck/close`, { headers: { Origin: deckhand.url }, data: { deckId: (await (await page.request.get(`${deckhand.url}/api/state`)).json()).deck.deckId } });
   await expect(banner).toBeVisible();
   await banner.getByRole('button', { name: 'Home' }).click();
-  await expect(page.locator('.landing')).toBeVisible();
+  await expect(page.locator('.home')).toBeVisible();
 });

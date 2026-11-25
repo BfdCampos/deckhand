@@ -39,16 +39,16 @@ async function editAppend(page, locator, text) {
 }
 
 test.describe('B1 failed saves', () => {
-  test.use({ allowedConsoleErrors: [/status of 500/] });
+  test.use({ allowedConsoleErrors: [/status of (500|403)/] });
 
   test('keep every typed edit, never claim Saved, and retry them all in order', async ({ page, deckhand }) => {
-    const dir = path.dirname(deckhand.deckPath);
+    const blocker = `${deckhand.deckPath}.deckhand-tmp`;
     const gen = await openEditor(page, deckhand);
     const frame = deckFrame(page);
     const p = frame.locator('section').first().locator('p');
     const h1 = frame.locator('h1');
+    await fs.mkdir(blocker);
     try {
-      await fs.chmod(dir, 0o555);
       await editAppend(page, p, ' first-typed');
       await expect(page.locator('.save-status')).toContainText("Couldn't save");
       await editAppend(page, p, ' second-typed');
@@ -59,11 +59,32 @@ test.describe('B1 failed saves', () => {
       await expect(h1).toHaveText('Basic deck third');
       expect(await frameGen(page)).toBe(gen);
     } finally {
-      await fs.chmod(dir, 0o755);
+      await fs.rm(blocker, { recursive: true, force: true });
     }
     await page.locator('.save-status').getByRole('button', { name: 'Retry' }).click();
     await expect(page.locator('.save-status')).toHaveText('Saved');
     await diskEventually(deckhand.deckPath, (s) => s.includes('The first slide. first-typed second-typed</p>') && s.includes('>Basic deck third</h1>'));
+  });
+
+  test('a file made read-only mid-edit keeps the text, shows the banner and saves after Retry', async ({ page, deckhand }) => {
+    await openEditor(page, deckhand);
+    const p = deckFrame(page).locator('section').first().locator('p');
+    await p.dblclick();
+    await caretToEnd(p);
+    await page.keyboard.type(' kept');
+    await fs.chmod(deckhand.deckPath, 0o444);
+    try {
+      await blurEditing(page);
+      await expect(page.locator('.save-status')).toContainText("Couldn't save");
+      await expect(page.locator('.banner', { hasText: 'This file is read-only.' })).toBeVisible();
+      await expect(p).toHaveText('The first slide. kept');
+    } finally {
+      await fs.chmod(deckhand.deckPath, 0o644);
+    }
+    await page.locator('.save-status').getByRole('button', { name: 'Retry' }).click();
+    await expect(page.locator('.save-status')).toHaveText('Saved');
+    await diskEventually(deckhand.deckPath, (s) => s.includes('The first slide. kept</p>'));
+    await expect(page.locator('.banner', { hasText: 'This file is read-only.' })).toHaveCount(0);
   });
 });
 
@@ -145,7 +166,7 @@ test.describe('M3 moves keep the element\'s own transform', () => {
     const file = await writeDeck(deckhand.home, 'transforms.html', DECK);
     await openDeckAt(page, deckhand, file);
     const frame = deckFrame(page);
-    await dragBy(page, frame.locator('#tilted'), 40, 0);
+    await dragBy(page, frame.locator('#tilted'), 40, 0, { centre: true });
     await diskEventually(file, (s) => /style="transform: rotate\(5deg\); width: 300px; translate: 40px 0px;"/.test(s));
 
     const h3 = frame.locator('h3.centre');
@@ -176,8 +197,7 @@ test.describe('M2 restart mid-edit', () => {
     await deckhand.restart();
     await diskEventually(file, (s) => s.includes('>Basic deck typed before the restart</h1>'), 15_000);
     await expect(page.locator('.save-status')).toHaveText('Saved');
-    await expect(page.locator('.banner')).toHaveCount(0);
-    await expect(page.locator('.banner', { hasText: 'closed in another tab' })).toHaveCount(0);
+    await expect(page.locator('.editor-banners .banner')).toHaveCount(0);
     await expect(h1).toHaveText('Basic deck typed before the restart');
   });
 });
@@ -250,7 +270,7 @@ test('m4 an inline edit warns when another tab changed the note first', async ({
   await other.close();
 });
 
-test.fixme('M1 an external write to another element during a text edit does not discard the edit', async ({ page, deckhand }) => {
+test('M1 an external write to another element during a text edit does not discard the edit', async ({ page, deckhand }) => {
   await openEditor(page, deckhand);
   const p = deckFrame(page).locator('section').first().locator('p');
   await p.dblclick();
@@ -261,4 +281,30 @@ test.fixme('M1 an external write to another element during a text edit does not 
   await blurEditing(page);
   await diskEventually(deckhand.deckPath, (s) => s.includes('The first slide. still mine</p>') && s.includes('Thanks for reading.'));
   await expect(p).toHaveText('The first slide. still mine');
+});
+
+test.describe('m1 conflicts', () => {
+  test.use({ allowedConsoleErrors: [/status of 409/] });
+
+  test('a tab whose edit lost to another tab keeps its text and says why', async ({ page, deckhand }) => {
+    await openEditor(page, deckhand);
+    const other = await page.context().newPage();
+    await openEditor(other, deckhand);
+    const mine = deckFrame(page).locator('h1');
+    await mine.dblclick();
+    await caretToEnd(mine);
+    await page.keyboard.type(' from tab one');
+
+    await editAppend(other, deckFrame(other).locator('h1'), ' from tab two');
+    await diskEventually(deckhand.deckPath, (s) => s.includes('>Basic deck from tab two</h1>'));
+
+    await blurEditing(page);
+    await expect(page.locator('.toast')).toContainText('This text changed in another tab');
+    await expect(page.locator('.save-status')).toContainText("Couldn't save");
+    await expect(mine).toHaveText('Basic deck from tab one');
+    await page.locator('.toast').getByRole('button', { name: 'Show theirs' }).click();
+    await expect(mine).toHaveText('Basic deck from tab two');
+    await expect(page.locator('.save-status')).toHaveText('Saved');
+    await other.close();
+  });
 });
