@@ -17,7 +17,7 @@ npm start
 
 Deckhand opens in your browser at `http://127.0.0.1:4321`. If that port is busy it picks the next free one and prints the real address. Press Ctrl+C to stop it; any agent it started stops too.
 
-To skip Home and go straight to a deck:
+To skip Home and go straight to a deck (the address Deckhand prints then opens that deck too):
 
 ```bash
 npm start -- /path/to/deck.html
@@ -39,7 +39,7 @@ Type what you want on Home ("a 6-slide pitch for our new coffee subscription, wa
 
 Deckhand gives your agent a short build contract along with your description: one self-contained HTML file, one `<section class="slide">` per slide, no network requests, real text elements you can edit. While it works you see what it's doing, a timer and a Stop button. When it finishes, the new deck opens in the editor.
 
-New decks are saved in `~/Deckhand`, named after the first few meaningful words of your description: the example above becomes `pitch-new-coffee-subscription-warm-minimal.html`, then `-2` if that's taken. If a run fails or you stop it, no half-written file is left behind.
+New decks are saved in `~/Deckhand`, named after the first few meaningful words of your description: the example above becomes `pitch-new-coffee-subscription-warm-minimal.html`, then `-2` if that's taken. If you stop a run, or it fails without a usable deck, nothing is left in `~/Deckhand`. If it fails after writing a complete, valid deck, Deckhand keeps that file and offers "Open what it made".
 
 ![The generation screen: the description, the agent, a timer, the file it will save as, and live activity from the agent](docs/screenshots/generation.png)
 
@@ -120,4 +120,4 @@ The tests use fake `claude` and `codex` CLIs, so they never call a real agent. I
 
 ## Licence
 
-MIT
+MIT. See [LICENSE](LICENSE).
