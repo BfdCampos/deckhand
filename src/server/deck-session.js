@@ -10,11 +10,15 @@ import { anchorSource, indexSource, planOp, applySplices, invertSplices, rebaseR
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const MAX_JOURNAL = 500;
+const MAX_CHANGES = 500;
 const DEBOUNCE_MS = 100;
 const POLL_MS = 250;
 const RECHECK_MS = 150;
 
 const closed = () => new HttpError(409, 'deck_closed', 'This deck is no longer open.');
+const readOnly = () => new HttpError(403, 'read_only', 'This deck is read-only.');
+const deckChanged = () => new HttpError(409, 'deck_changed', 'That part of the deck changed on disk. Reloading.');
+const editConflict = () => new HttpError(409, 'edit_conflict', 'This text changed in another tab, so your edit wasn\'t saved.');
 const cannotUndo = () => new HttpError(409, 'cannot_undo', "That can't be undone any more.");
 
 async function writable(p) {
@@ -34,6 +38,8 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   let locked = null;
   let mods = [];
   let journal = [];
+  let changes = [];
+  let historyFrom = 1;
   let chain = Promise.resolve();
 
   const broadcast = (event) => hub?.broadcast(event);
@@ -74,24 +80,58 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     journal = [];
   }
 
+  function logChange(ids, external) {
+    changes.push({ rev: deck.rev, ids, external });
+    if (changes.length > MAX_CHANGES) historyFrom = changes.shift().rev;
+  }
+
+  function changedSince(baseRev, { external = false } = {}) {
+    const out = new Set();
+    for (const c of changes) if (c.rev > baseRev && (!external || c.external)) for (const id of c.ids) out.add(id);
+    return out;
+  }
+
+  function changedIds(oldIdx, newIdx) {
+    const outer = (idx, id) => {
+      const info = idx.get(id);
+      return info ? idx.source.slice(info.start, info.end) : null;
+    };
+    const ids = new Set();
+    for (const id of new Set([...oldIdx.ids.keys(), ...newIdx.ids.keys()])) if (outer(oldIdx, id) !== outer(newIdx, id)) ids.add(id);
+    return ids;
+  }
+
   function adopt(buf, source) {
+    const previous = deck.index;
     const loaded = load(buf);
     deck.source = loaded.source;
     deck.index = loaded.index;
     deck.anchorsFlushed = loaded.flushed;
-    deck.readOnly = deck.fileReadOnly || !loaded.roundTrips;
+    deck.encodingReadOnly = !loaded.roundTrips;
+    deck.readOnly = deck.fileReadOnly || deck.encodingReadOnly;
     deck.diskHash = sha(buf);
     deck.missing = false;
     deck.rev++;
     deck.lastExternalRev = deck.rev;
+    logChange(changedIds(previous, loaded.index), true);
     resetJournal();
     broadcast({ type: 'deck-changed', deckId: deck.deckId, rev: deck.rev, source });
   }
 
-  async function writeDisk(text) {
-    const buf = Buffer.from(text, 'utf8');
+  async function refreshWritable() {
+    let st = null;
+    try { st = await fsp.stat(deck.path); } catch {}
+    if (st) deck.mode = st.mode & 0o7777;
+    const ok = (!st || (await writable(deck.path))) && (await writable(deck.dir));
+    const was = deck.readOnly;
+    deck.fileReadOnly = !ok;
+    deck.readOnly = deck.fileReadOnly || deck.encodingReadOnly;
+    if (was !== deck.readOnly) broadcast({ type: 'deck', deck: meta() });
+    return !deck.readOnly;
+  }
+
+  async function writeAtomic(buf) {
     const tmp = `${deck.path}.deckhand-tmp`;
-    deck.diskHash = sha(buf);
     try {
       await fsp.writeFile(tmp, buf, { mode: deck.mode });
       await fsp.chmod(tmp, deck.mode);
@@ -100,7 +140,13 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       await fsp.rm(tmp, { force: true }).catch(() => {});
       throw new HttpError(500, 'write_failed', "Couldn't save the deck.");
     }
+    deck.diskHash = sha(buf);
     scheduleRecheck();
+  }
+
+  async function writeDisk(text) {
+    if (!(await refreshWritable())) throw readOnly();
+    await writeAtomic(Buffer.from(text, 'utf8'));
   }
 
   function checkDisk() {
@@ -175,6 +221,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
         name: path.basename(real),
         mode,
         fileReadOnly,
+        encodingReadOnly: !loaded.roundTrips,
         readOnly: fileReadOnly || !loaded.roundTrips,
         source: loaded.source,
         index: loaded.index,
@@ -186,6 +233,8 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       };
       locked = null;
       resetJournal();
+      changes = [];
+      historyFrom = 1;
       await startWatching();
       if (notes) await notes.bind(meta());
       try { await store?.addRecent?.(real); } catch {}
@@ -207,10 +256,9 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     });
   }
 
-  function guard(deckId, { write = true } = {}) {
+  function guard(deckId) {
     if (!deck || deckId !== deck.deckId) throw closed();
     if (locked) throw new HttpError(423, 'run_active', 'The agent is editing this deck.');
-    if (write && deck.readOnly) throw new HttpError(403, 'read_only', 'This deck is read-only.');
     if (deck.missing) throw new HttpError(409, 'deck_missing', "Can't find the deck file.");
   }
 
@@ -227,9 +275,13 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   function applyOps(deckId, tabId, baseRev, ops) {
     return run(async () => {
       guard(deckId);
+      if (!(await refreshWritable())) throw readOnly();
       if (!Number.isInteger(baseRev)) throw new HttpError(400, 'bad_op', 'Missing baseRev.');
       if (!Array.isArray(ops) || !ops.length || ops.length > 200) throw new HttpError(400, 'bad_op', 'Send between 1 and 200 changes.');
-      if (deck.lastExternalRev > baseRev) throw new HttpError(409, 'deck_changed', 'The deck changed on disk. Reloading.');
+      const known = baseRev >= historyFrom && baseRev <= deck.rev;
+      const stale = !known || deck.lastExternalRev > baseRev;
+      const outside = known ? changedSince(baseRev, { external: true }) : new Set();
+      const touched = known ? changedSince(baseRev) : new Set();
       let source = deck.source;
       let index = deck.index;
       let maxN = index.maxN;
@@ -237,7 +289,16 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       const results = [];
       for (const op of ops) {
         const opId = typeof op?.opId === 'string' && op.opId.length <= 80 ? op.opId : crypto.randomUUID();
-        const plan = planOp(index, op, { nextId: () => `dh${++maxN}` });
+        const type = op?.type ?? op?.kind;
+        if (stale && type !== 'insert' && (outside.has(op?.aiId) || (!known && type !== 'setInner'))) throw deckChanged();
+        let plan;
+        try {
+          plan = planOp(index, op, { nextId: () => `dh${++maxN}` });
+        } catch (e) {
+          if (e.code === 'script_owned' && !known && stale) throw deckChanged();
+          if (e.code === 'script_owned' && touched.has(op.aiId)) throw editConflict();
+          throw e;
+        }
         if (!plan.splices.length) {
           results.push({ opId, ...plan.result });
           continue;
@@ -249,7 +310,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
         source = next.source;
         index = nextIndex;
         maxN = Math.max(maxN, index.maxN);
-        entries.push({ opId, tabId, applied: next.applied, tweak: plan.tweak || null });
+        entries.push({ opId, tabId, applied: next.applied, tweak: plan.tweak || null, aiId: plan.result.aiId });
       }
       if (!entries.length) return { rev: deck.rev, results };
       const journalled = [];
@@ -274,6 +335,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
       deck.index = index;
       deck.anchorsFlushed = true;
       deck.rev++;
+      logChange(new Set(entries.map((e) => e.aiId)), false);
       for (const { entry, applied } of journalled) {
         mods.push({ splices: applied, inverseOf: null });
         entry.mod = mods.length - 1;
@@ -297,6 +359,7 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   function replay(deckId, tabId, opId, direction) {
     return run(async () => {
       guard(deckId);
+      if (!(await refreshWritable())) throw readOnly();
       const entry = journal.find((e) => e.opId === opId && e.tabId === tabId);
       if (!entry) throw cannotUndo();
       const undoing = direction === 'undo';
@@ -316,9 +379,11 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
         await updateTweak(entry.tweak, undoing ? entry.tweakAfter : entry.tweakBefore);
         throw err;
       }
+      const previous = deck.index;
       deck.source = next.source;
       deck.index = nextIndex;
       deck.rev++;
+      logChange(changedIds(previous, nextIndex), false);
       mods.push({ splices: next.applied, inverseOf: from });
       if (undoing) entry.undoMod = mods.length - 1;
       else entry.mod = mods.length - 1;
@@ -331,7 +396,12 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
   function flushAnchors() {
     return run(async () => {
       if (!deck || deck.anchorsFlushed || deck.readOnly) return;
-      await writeDisk(deck.source);
+      try {
+        await writeDisk(deck.source);
+      } catch (e) {
+        if (e.code === 'read_only') return;
+        throw e;
+      }
       deck.anchorsFlushed = true;
     });
   }
@@ -340,13 +410,9 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     return run(async () => {
       if (!deck) throw closed();
       const data = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf), 'utf8');
-      const tmp = `${deck.path}.deckhand-tmp`;
-      deck.diskHash = sha(data);
-      await fsp.writeFile(tmp, data, { mode: deck.mode });
-      await fsp.chmod(tmp, deck.mode);
-      await fsp.rename(tmp, deck.path);
+      try { deck.mode = (await fsp.stat(deck.path)).mode & 0o7777; } catch {}
+      await writeAtomic(data);
       adopt(data, source);
-      scheduleRecheck();
     });
   }
 
