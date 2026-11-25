@@ -32,10 +32,10 @@ export async function makeBin(dir, files) {
   return dir;
 }
 
-export async function startDeckhand({ args = [], env = {}, binDir = null, portArgs = ['--port', '0'] } = {}) {
+export async function startDeckhand({ args = [], env = {}, binDir = null, portArgs = ['--port', '0'], noOpen = true } = {}) {
   const home = env.HOME || await tempDir('deckhand-home-');
   const emptyBin = binDir || await tempDir('deckhand-bin-');
-  const proc = spawn(process.execPath, [SERVER, ...portArgs, '--no-open', ...args], {
+  const proc = spawn(process.execPath, [SERVER, ...portArgs, ...(noOpen ? ['--no-open'] : []), ...args], {
     cwd: ROOT,
     env: {
       HOME: home,

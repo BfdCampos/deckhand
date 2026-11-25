@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { startDeckhand, tempDir, makeDeck, makeBin, request, postJson, pidAlive, waitFor } from './support/deckhand-process.js';
+import { browserCommand } from '../../src/server/open.js';
 
 function occupy(port) {
   return new Promise((resolve) => {
@@ -165,5 +166,79 @@ describe('launch', () => {
     const { code } = await srv.exited;
     assert.equal(code, 0);
     assert.ok(Date.now() - t0 < 2000);
+  });
+});
+
+describe('AC-71 auto-open', () => {
+  async function opener() {
+    const root = await tempDir();
+    const log = path.join(root, 'opened.log');
+    const bin = await makeBin(path.join(root, 'bin'), {
+      'fake-open': `require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n');`,
+    });
+    const read = async () => {
+      try { return (await fsp.readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; }
+    };
+    return { root, cmd: path.join(bin, 'fake-open'), read };
+  }
+
+  const live = (cmd, extra = {}) => ({ DECKHAND_TEST: '0', DECKHAND_OPEN_CMD: cmd, ...extra });
+
+  test('opens Home in the browser on launch', async () => {
+    const o = await opener();
+    const srv = await startDeckhand({ noOpen: false, env: live(o.cmd) });
+    try {
+      const calls = await waitFor(async () => { const c = await o.read(); return c.length ? c : null; });
+      assert.deepEqual(calls, [[`http://127.0.0.1:${srv.port}/`]]);
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  test('opens straight to the editor when a deck is given', async () => {
+    const o = await opener();
+    const deck = await makeDeck(o.root, 'my deck.html');
+    const srv = await startDeckhand({ noOpen: false, args: [deck], env: live(o.cmd) });
+    try {
+      const [[url]] = await waitFor(async () => { const c = await o.read(); return c.length ? c : null; });
+      assert.equal(url, `http://127.0.0.1:${srv.port}/edit?deck=${encodeURIComponent(deck)}`);
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  for (const [label, opts] of [
+    ['--no-open', { noOpen: true, env: {} }],
+    ['CI', { noOpen: false, env: { CI: 'true' } }],
+    ['DECKHAND_TEST', { noOpen: false, env: { DECKHAND_TEST: '1' } }],
+  ]) {
+    test(`${label} suppresses it`, async () => {
+      const o = await opener();
+      const srv = await startDeckhand({ noOpen: opts.noOpen, env: { ...live(o.cmd), ...opts.env } });
+      try {
+        await new Promise((r) => setTimeout(r, 400));
+        assert.deepEqual(await o.read(), []);
+      } finally {
+        await srv.stop();
+      }
+    });
+  }
+
+  test('a missing opener never crashes the server', async () => {
+    const srv = await startDeckhand({ noOpen: false, env: live('/nonexistent/deckhand-opener') });
+    try {
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal((await request(srv.port, { path: '/' })).status, 200);
+      assert.equal(srv.proc.exitCode, null);
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  test('picks the platform opener', () => {
+    assert.deepEqual(browserCommand({ platform: 'darwin', env: {} }), 'open');
+    assert.deepEqual(browserCommand({ platform: 'linux', env: {} }), 'xdg-open');
+    assert.equal(browserCommand({ platform: 'win32', env: {} }), null);
+    assert.equal(browserCommand({ platform: 'darwin', env: { DECKHAND_OPEN_CMD: '/x/y' } }), '/x/y');
   });
 });
