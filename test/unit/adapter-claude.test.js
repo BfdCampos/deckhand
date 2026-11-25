@@ -136,3 +136,12 @@ test('a CLI without --tools is too old to run', () => {
   assert.equal(claude.blocker(null), null);
   assert.equal(claude.blocker(ALL_FLAGS), null);
 });
+
+test('the result line does not repeat the message just before it', () => {
+  const said = { type: 'assistant', message: { content: [{ type: 'text', text: 'All done here.' }] } };
+  const same = parseLines([JSON.stringify(said), JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'All done here.' })], '/tmp');
+  assert.deepEqual(brief(same.events), [['text', 'All done here.'], ['result', 'Done.']]);
+  assert.equal(same.result.text, 'All done here.');
+  const different = parseLines([JSON.stringify(said), JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'Summary.' })], '/tmp');
+  assert.deepEqual(brief(different.events).at(-1), ['result', 'Summary.']);
+});
