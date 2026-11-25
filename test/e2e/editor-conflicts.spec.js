@@ -174,3 +174,43 @@ test.describe('text-only edits', () => {
     await diskEventually(file, (s) => /<p data-ai-id="dh\d+" id="comment">Hello <!-- keep this comment --> <br>next<\/p>/.test(s));
   });
 });
+
+test.describe('whitespace', () => {
+  test.use({ deckhandOptions: {} });
+  const DECK = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Spaces</title><style>.pw { white-space: pre-wrap; }</style></head><body>
+<section class="slide">
+  <p class="pw" id="pre">Line one</p>
+  <p id="normal">Plain words</p>
+</section>
+</body></html>
+`;
+
+  test('spaces typed in a pre-wrap element are saved exactly', async ({ page, deckhand }) => {
+    const file = await writeDeck(deckhand.home, 'spaces.html', DECK);
+    await openDeckAt(page, deckhand, file);
+    const pre = deckFrame(page).locator('#pre');
+    await pre.dblclick();
+    await caretToEnd(pre);
+    await page.keyboard.type('   ');
+    await blurEditing(page);
+    await diskEventually(file, (s) => s.includes('id="pre">Line one   </p>'));
+  });
+
+  test('an edit the server reports as unchanged is not claimed as saved', async ({ page, deckhand }) => {
+    const file = await writeDeck(deckhand.home, 'spaces.html', DECK);
+    await openDeckAt(page, deckhand, file);
+    await page.route('**/api/deck/ops', async (route) => {
+      const response = await route.fetch();
+      const json = await response.json();
+      json.results = json.results.map((r) => ({ ...r, changed: false }));
+      await route.fulfill({ response, json });
+    });
+    const normal = deckFrame(page).locator('#normal');
+    await normal.dblclick();
+    await caretToEnd(normal);
+    await page.keyboard.type(' more');
+    await blurEditing(page);
+    await expect(page.locator('.toast')).toContainText('nothing to save');
+    await expect(normal).toHaveText('Plain words');
+  });
+});
