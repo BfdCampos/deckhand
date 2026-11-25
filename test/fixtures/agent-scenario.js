@@ -454,11 +454,13 @@ async function finalPlain(ctx, step) {
   }
 }
 
+function ignoreTerm() {
+  process.removeAllListeners('SIGTERM');
+  process.on('SIGTERM', () => {});
+}
+
 async function hang(ctx, step) {
-  if (step.ignoreTerm) {
-    process.removeAllListeners('SIGTERM');
-    process.on('SIGTERM', () => {});
-  }
+  if (step.ignoreTerm) ignoreTerm();
   if (step.child) {
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     appendLog({ tool: ctx.tool, mode: 'child', pid: process.pid, childPid: child.pid });
@@ -552,6 +554,11 @@ export async function main(tool) {
   const prompt = stdinWanted ? stdin : positionals.join(' ');
   const cwd = tool === 'codex' && flags.cd ? path.resolve(flags.cd) : process.cwd();
   const scenarioName = pickScenario(prompt);
+  const scenario = loadScenario(scenarioName);
+  const target = createTarget(prompt);
+  const kind = target ? 'create' : 'edit';
+  const steps = scenario ? stepsFor(scenario, kind) : [];
+  if (steps.some((s) => s.hang && s.ignoreTerm)) ignoreTerm();
   appendLog(baseEntry(tool, 'run', args, stdinWanted ? stdin : null, { scenario: scenarioName }));
 
   if (tool === 'claude') {
@@ -568,16 +575,13 @@ export async function main(tool) {
     if (!prompt.trim()) return fail('No prompt provided via stdin.', 1);
   }
 
-  const scenario = loadScenario(scenarioName);
   if (!scenario) return fail(`fake ${tool}: unknown scenario "${scenarioName}"`, 2);
 
-  const target = createTarget(prompt);
-  const kind = target ? 'create' : 'edit';
   const workorder = findWorkOrder(cwd);
   const ctx = {
     tool, flags, prompt, kind, target, cwd, realCwd: fs.realpathSync(cwd), workorder,
     deck: kind === 'edit' ? findDeck(cwd, prompt, workorder) : target,
     sessionId: randomUUID(), started: Date.now(), denials: [], items: 0, n: 0, lastText: null,
   };
-  await runSteps(ctx, stepsFor(scenario, kind));
+  await runSteps(ctx, steps);
 }
