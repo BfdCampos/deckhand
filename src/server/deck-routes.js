@@ -19,10 +19,12 @@ export function deckRoutes({ session, notes }) {
     'POST /api/deck/undo': ({ body }) => session.undo(body.deckId, String(body.tabId ?? ''), body.opId),
     'POST /api/deck/redo': ({ body }) => session.redo(body.deckId, String(body.tabId ?? ''), body.opId),
     'GET /api/notes': () => notes.snapshot(),
-    'POST /api/notes': ({ body }) => {
+    'POST /api/notes': async ({ body }) => {
       currentDeck(body.deckId);
       if (session.isLocked()) throw new HttpError(423, 'run_active', 'Notes are locked while the agent is working.');
-      return notes.apply(body);
+      const result = await notes.apply(body);
+      await session.flushAnchors();
+      return result;
     },
   };
 }
