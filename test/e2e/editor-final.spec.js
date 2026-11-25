@@ -48,6 +48,7 @@ test.describe('while locked', () => {
     await handoff(page).click();
     const pill = page.locator('.editor-pill');
     await expect(pill).toBeVisible();
+    await expect(deckFrame(page).locator('h1')).toHaveText(/^Edited: /);
     await fs.appendFile(deckhand.deckPath, '\n<!-- external -->\n');
     const toast = page.locator('.toast', { hasText: 'Updated from disk' });
     await expect(toast).toBeVisible();
