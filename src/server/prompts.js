@@ -1,10 +1,18 @@
 export const BUILD_CONTRACT = "You're creating a new slide deck for Deckhand, a local HTML presentation editor. Write exactly one file, `<name>.html`, in the current folder, and nothing else. It must be a single self-contained HTML document: all CSS in `<style>`, any JavaScript in `<script>`, images as inline SVG or data URIs, and no external requests (no CDNs, web fonts or remote images) so it works offline. Each slide is a `<section class=\"slide\">` directly inside `<body>`, in order, each exactly filling the viewport (100vw by 100vh), stacked vertically with CSS scroll-snap, and designed to look right at 16:9. Put all text in semantic elements (h1 to h3, p, ul/li, blockquote, figcaption) so a person can edit it by hand. Don't build or change slides with JavaScript at runtime; JavaScript is only for optional keyboard navigation. Make it look designed: one coherent palette, a strong type hierarchy, generous whitespace, consistent layouts. Don't run shell commands or touch the network. The person's request follows.";
 
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g;
+
 export function createPrompt({ name, description }) {
-  return `${BUILD_CONTRACT.replace('`<name>.html`', `\`${name}\``)}\n\n${String(description).trim()}`;
+  const safe = String(name).replace(CONTROL, ' ').replace(/`/g, '');
+  return `${BUILD_CONTRACT.replace('`<name>.html`', `\`${safe}\``)}\n\n${String(description).trim()}`;
+}
+
+export function quoteName(name) {
+  return JSON.stringify(String(name ?? '').replace(CONTROL, ' '));
 }
 
 export function guardrail({ kind, deck, workOrder, target }) {
+  [deck, workOrder, target] = [deck, workOrder, target].map(quoteName);
   if (kind === 'create') {
     return [
       'You are the deck builder inside Deckhand, a local HTML presentation editor.',
@@ -23,6 +31,7 @@ export function guardrail({ kind, deck, workOrder, target }) {
 }
 
 export function editPrompt({ deck, workOrder, notes = [], noteId = null }) {
+  [deck, workOrder] = [deck, workOrder].map(quoteName);
   const lines = [
     `Read the Deckhand work order in ${workOrder}, then read ${deck} to see its structure and CSS before you change anything.`,
     `Apply each open note in the work order as a precise edit to ${deck}. After you apply a note, tick its box in ${workOrder}.`,
