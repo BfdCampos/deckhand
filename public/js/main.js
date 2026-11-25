@@ -18,14 +18,24 @@ function urlSlide() {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-function showEditor(deck, { push = true, slide = null } = {}) {
-  store.set({ deck });
+function showEditor(deck, { push = true, slide = null, paused = null } = {}) {
+  if (!paused) store.set({ deck });
   if (urlDeck() !== deck.path) {
     const target = '/edit?deck=' + encodeURIComponent(deck.path) + (slide ? `&slide=${slide}` : '');
-    history[push ? 'pushState' : 'replaceState'](null, '', target);
+    history[push ? 'pushState' : 'replaceState']({ deckPath: deck.path }, '', target);
+  } else if (history.state?.deckPath !== deck.path) {
+    history.replaceState({ ...history.state, deckPath: deck.path }, '', location.href);
   }
   home.hide();
-  editor.open(deck, { slide });
+  editor.open(deck, { slide, paused });
+}
+
+function pauseFor(current) {
+  return {
+    deck: current,
+    onSwitch: () => showEditor(current, { push: false }),
+    onHome: () => showHome({ push: true }),
+  };
 }
 
 function showHome({ push = false } = {}) {
@@ -41,15 +51,23 @@ async function openDeck(path, { push = true, slide = null } = {}) {
   pendingOpen = path;
   try {
     const deck = normaliseDeck(await api.post('/api/deck/open', { path }));
+    let current = deck;
+    try { current = deckFromState(await api.get('/api/state')) || deck; } catch { /* trust the open */ }
+    if (current.deckId !== deck.deckId) {
+      store.set({ deck: current });
+      showEditor(deck, { push, slide, paused: pauseFor(current) });
+      return;
+    }
     showEditor(deck, { push, slide });
   } finally {
     pendingOpen = null;
   }
 }
 
-function askToOpen(wanted, slide) {
+function askToOpen(wanted, slide, { fromHistory = false } = {}) {
   showHome();
   confirmDeepLink(wanted, {
+    reason: fromHistory ? 'history' : 'link',
     onOpen: () => openDeck(wanted, { push: true, slide }).catch((err) => { showHome(); home.showError(err.message); }),
     onCancel: () => showHome(),
   });
@@ -61,7 +79,7 @@ async function route({ boot = false } = {}) {
   const current = store.get().deck;
   if (wanted) {
     if (current && current.path === wanted) return showEditor(current, { push: false, slide });
-    askToOpen(wanted, slide);
+    askToOpen(wanted, slide, { fromHistory: history.state?.deckPath === wanted });
     return;
   }
   if (boot && current) return showEditor(current, { push: false });
@@ -96,10 +114,7 @@ onEvent((m) => {
     return;
   }
   if (deck.path === pendingOpen) return;
-  editor.showElsewhere(deck, {
-    onSwitch: () => showEditor(deck, { push: false }),
-    onHome: () => showHome({ push: true }),
-  });
+  editor.showElsewhere(deck, pauseFor(deck));
 });
 
 window.addEventListener('popstate', () => route());

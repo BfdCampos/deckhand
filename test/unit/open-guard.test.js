@@ -185,3 +185,64 @@ describe('n7: npm start -- ./deck.html resolves against the shell folder', () =>
     }
   });
 });
+
+describe('R2: symlinked decks are judged by their real target', () => {
+  test('a .html link to a non-HTML file is refused and the target is untouched', async () => {
+    const dir = await tempDir();
+    const target = path.join(dir, 'zshrc');
+    await fsp.writeFile(target, 'export SECRET=1\n');
+    await fsp.symlink(target, path.join(dir, 'sneaky.html'));
+    await fsp.mkdir(path.join(dir, 'realdir'));
+    await fsp.symlink(path.join(dir, 'realdir'), path.join(dir, 'dirlink.html'));
+    const good = await makeDeck(dir, 'real.html');
+    await fsp.symlink(good, path.join(dir, 'alias.html'));
+    await fsp.symlink(good, path.join(dir, 'alias-no-ext'));
+    const srv = await startDeckhand({ args: [good] });
+    try {
+      const sneaky = await postJson(srv.port, '/api/open', { path: path.join(dir, 'sneaky.html') });
+      assert.equal(sneaky.status, 400);
+      assert.equal(sneaky.json.error.code, 'not_html');
+      const dirLink = await postJson(srv.port, '/api/open', { path: path.join(dir, 'dirlink.html') });
+      assert.equal(dirLink.json.error.code, 'is_dir');
+      assert.equal((await request(srv.port, { path: '/api/state' })).json.deckPath, good);
+      assert.equal(await fsp.readFile(target, 'utf8'), 'export SECRET=1\n');
+      const alias = await postJson(srv.port, '/api/open', { path: path.join(dir, 'alias.html') });
+      assert.equal(alias.status, 200, 'a .html link to a .html deck still opens');
+      assert.equal(alias.json.path, good);
+      const noExt = await postJson(srv.port, '/api/open', { path: path.join(dir, 'alias-no-ext') });
+      assert.equal(noExt.status, 200, 'the real target decides, not the link name');
+    } finally {
+      await srv.stop();
+    }
+  });
+});
+
+describe('R3: /deckroot hidden segments with every separator and encoding', () => {
+  test('backslashes and encoded separators cannot smuggle hidden or non-web files', async () => {
+    const dir = await tempDir();
+    await fsp.mkdir(path.join(dir, 'sub'));
+    await fsp.mkdir(path.join(dir, 'sub\\.hidden'), { recursive: true }).catch(() => {});
+    await fsp.writeFile(path.join(dir, 'sub', 'ok.png'), 'png');
+    await makeDeck(dir);
+    const srv = await startDeckhand({ args: [path.join(dir, 'deck.html')] });
+    try {
+      const paths = [
+        '/deckroot/sub%5c.hidden%5cx.png',
+        '/deckroot/sub%5C.hidden%5Cx.png',
+        '/deckroot/sub\\.hidden\\x.png',
+        '/deckroot/%2ehidden/x.png',
+        '/deckroot/sub%2f.hidden%2fx.png',
+        '/deckroot/sub/%2Eenv',
+        '/deckroot/.%65nv',
+        '/deckroot/x%5c..%5cdeck.html',
+      ];
+      for (const p of paths) {
+        const res = await request(srv.port, { path: p });
+        assert.equal(res.status, 403, p);
+      }
+      assert.equal((await request(srv.port, { path: '/deckroot/sub/ok.png' })).status, 200);
+    } finally {
+      await srv.stop();
+    }
+  });
+});

@@ -56,7 +56,9 @@ export function createManual(ctx) {
       d.removeEventListener('mouseup', up, true);
       const done = drag;
       drag = null;
-      if (done.moved) saveStyle(done.t, done.prevStyle, { transform: done.t.style.transform });
+      if (!done.moved) return;
+      if (!ctx.canEdit()) { setStyleAttr(done.t, done.prevStyle); return; }
+      saveStyle(done.t, done.prevStyle, { transform: done.t.style.transform });
     };
     d.addEventListener('mousemove', move, true);
     d.addEventListener('mouseup', up, true);
@@ -100,7 +102,9 @@ export function createManual(ctx) {
       t.removeAttribute('contenteditable');
       if (ctx.editing === t) ctx.editing = null;
       const after = cleanInner(t);
-      if (after !== before) {
+      if (after !== before && !ctx.canEdit()) {
+        setInnerHtml(t, before);
+      } else if (after !== before) {
         saver.apply(() => ({ type: 'setInner', aiId: aiIdOf(t), tag: t.tagName.toLowerCase(), before, after }), {
           rollback: () => setInnerHtml(t, before),
           undo: () => setInnerHtml(t, before),
@@ -138,7 +142,9 @@ export function createManual(ctx) {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       iframe.style.pointerEvents = '';
-      if (changed) saveStyle(img, prevStyle, { width: img.style.width, height: img.style.height });
+      if (!changed) return;
+      if (!ctx.canEdit()) { setStyleAttr(img, prevStyle); return; }
+      saveStyle(img, prevStyle, { width: img.style.width, height: img.style.height });
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
