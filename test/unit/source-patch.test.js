@@ -572,7 +572,9 @@ describe('QA2 re-verification: entities, whitespace, comments and links', () => 
   test('R-m2 replacing text around a comment keeps the comment', () => {
     const src = '<body><section class="slide"><p>one <!-- c --> two</p></section></body>';
     const { anchored, out } = edit(src, 'one <!-- c --> two', 'uno');
-    assert.match(out, /<p data-ai-id="dh\d+">uno<!-- c --><\/p>/);
+    const inner = /<p data-ai-id="dh\d+">(.*)<\/p>/.exec(out)[1];
+    assert.equal(inner.split('<!-- c -->').length, 2, 'the comment is kept once');
+    assert.equal(inner.replace('<!-- c -->', ''), 'uno');
     assert.equal(out.replace(/<p data-ai-id="dh\d+">.*<\/p>/, ''), anchored.replace(/<p data-ai-id="dh\d+">.*<\/p>/, ''));
   });
 
