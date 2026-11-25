@@ -136,6 +136,7 @@ export function createGeneration({ openDeck, goHome, showRun }) {
       card.setHeader('Activity', 'error');
       errorBox.textContent = trimError(run.error) || NO_FILE;
       errorBox.hidden = false;
+      card.setError(errorBox.textContent, { box: false });
       failure.hidden = false;
       const buttons = [
         button('Try again', { primary: true, iconName: 'refresh', onClick: tryAgain }),
@@ -261,6 +262,7 @@ export function createGeneration({ openDeck, goHome, showRun }) {
       stopping = false;
       finishing = false;
       card.setLines([]);
+      card.setError(null);
       card.setHeader('Activity', 'working', 'Starting…');
       actions.replaceChildren();
       failure.hidden = true;

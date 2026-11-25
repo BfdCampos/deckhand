@@ -135,7 +135,7 @@ export function mountRuns(ctx) {
     card.setTimer(run.startedAt, run.endedAt);
 
     let summary = null;
-    if (run.reverted) summary = 'Reverted. The deck and notes are back how they were before this run.';
+    if (run.reverted) summary = run.kind === 'create' ? 'Deleted. The deck is gone and your description is back on Home.' : 'Reverted. The deck and notes are back how they were before this run.';
     else if (run.status === 'succeeded') {
       if (run.summary && typeof run.summary.total === 'number') summary = `Applied ${run.summary.applied} of ${plural(run.summary.total, 'note', 'notes')}.`;
       else summary = run.kind === 'create' ? 'Deck created.' : 'Done.';
@@ -342,7 +342,7 @@ export function mountRuns(ctx) {
         : `Deckhand will put ${deckName} and its notes back exactly as they were before ${who} started.`),
       h('p', { class: 'text-muted' }, target.kind === 'create' ? "You can't undo this." : "Any edits made since the run finished will be lost too. You can't undo this."));
     openModal({
-      title: 'Revert this run?',
+      title: target.kind === 'create' ? 'Delete this deck?' : 'Revert this run?',
       body,
       width: 440,
       actions: [
@@ -359,7 +359,8 @@ export function mountRuns(ctx) {
       const next = await api.post(`/api/runs/${encodeURIComponent(target.id)}/revert`, {});
       revertedIds.add(target.id);
       applyRun(next);
-      toast('Reverted. The deck is back how it was before the run.', { tone: 'success' });
+      const name = currentDeck()?.name || 'the deck';
+      toast(target.kind === 'create' ? `Deleted ${name}. Your description is back on Home.` : 'Reverted. The deck is back how it was before the run.', { tone: 'success' });
       if (target.kind === 'create') {
         if (target.description) localStorage.setItem('deckhand.draft', target.description);
         ctx.goHome();

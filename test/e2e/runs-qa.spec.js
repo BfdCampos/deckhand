@@ -82,8 +82,12 @@ test.describe('create runs', () => {
     await expect(card(page).getByRole('button', { name: 'Delete this deck' })).toBeVisible();
     await expect(card(page).getByRole('button', { name: 'Revert changes' })).toHaveCount(0);
     await card(page).getByRole('button', { name: 'Delete this deck' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Revert this run?' });
-    await expect(dialog.getByRole('button', { name: 'Delete this deck' })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Delete this deck?' });
+    await dialog.getByRole('button', { name: 'Delete this deck' }).click();
+    await expect(page.locator('.home')).toBeVisible();
+    await expect(input(page)).toHaveValue('A short deck about tidy desks');
+    await expect(page.locator('.toast')).toContainText('Deleted');
+    expect(fs.readdirSync(decksDir(deckhand)).filter((f) => f.endsWith('.html'))).toEqual([]);
   });
 
   test('m5 a very long description never breaks Saves as or logs an error', async ({ page, deckhand }) => {
@@ -107,9 +111,13 @@ test.describe('create runs', () => {
     await page.getByRole('button', { name: 'Copy prompt' }).click();
     await expect(page.locator('.toast')).toContainText('Prompt copied');
     const clip = await page.evaluate(() => navigator.clipboard.readText());
+    const made = fs.readdirSync(decksDir(deckhand)).filter((f) => f.endsWith('.html'));
+    expect(made).toHaveLength(1);
+    const next = made[0].replace(/\.html$/, '-2.html');
     await page.getByRole('button', { name: 'Edit description' }).click();
-    const saves = (await page.locator('.create-target-path').textContent()).split('/').pop();
-    expect(clip).toContain(saves);
-    expect(fs.existsSync(path.join(decksDir(deckhand), saves))).toBe(false);
+    await expect(page.locator('.create-target')).toHaveAttribute('title', `~/Deckhand/${next}`);
+    await expect(page.locator('.create-target')).toHaveText(`Saves as ~/Deckhand/${next}`);
+    expect(clip).toContain(next);
+    expect(fs.existsSync(path.join(decksDir(deckhand), next))).toBe(false);
   });
 });
