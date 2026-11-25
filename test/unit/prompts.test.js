@@ -31,5 +31,5 @@ test('guardrails confine the agent', () => {
   assert.match(edit, /data-ai-id/);
   const create = guardrail({ kind: 'create', target: 'tea.html' });
   assert.match(create, /Write exactly one file, tea\.html, and nothing else/);
-  for (const g of [edit, create]) assert.doesNotMatch(g, /—/);
+  for (const g of [edit, create]) assert.doesNotMatch(g, /\u2014/);
 });
