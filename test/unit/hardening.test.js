@@ -87,3 +87,21 @@ describe('store compatibility', () => {
     assert.equal(again.get().agent, 'codex');
   });
 });
+
+describe('read-only decks', () => {
+  test('uploads are refused with 403 and nothing is written', async () => {
+    const root = await tempDir();
+    const deck = await makeDeck(root);
+    await fsp.chmod(deck, 0o444);
+    const srv = await startDeckhand({ args: [deck] });
+    try {
+      const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+      const res = await request(srv.port, { method: 'POST', path: '/api/assets', headers: { Origin: `http://127.0.0.1:${srv.port}`, 'Content-Type': 'image/png', 'X-Filename': 'a.png' }, body: png });
+      assert.equal(res.status, 403);
+      assert.equal(res.json.error.code, 'read_only');
+      assert.deepEqual(await fsp.readdir(root), ['deck.html']);
+    } finally {
+      await srv.stop();
+    }
+  });
+});
