@@ -24,8 +24,14 @@ export async function openEditor(page, deckhand, query = '') {
   return frameGen(page);
 }
 
-export async function openDeckAt(page, deckhand, deckPath, query = '') {
-  await page.goto(`${deckhand.url}/edit?deck=${encodeURIComponent(deckPath)}${query}`);
+export async function openDeckAt(page, deckhand, deckPath) {
+  await page.goto(deckhand.url);
+  const home = page.locator('.landing');
+  await expect(page.locator('.landing:not([hidden]), .editor:not([hidden])').first()).toBeVisible();
+  if (!(await home.isVisible())) await page.getByRole('button', { name: '← Home' }).click();
+  const field = page.locator('.picker-manual input');
+  await field.fill(deckPath);
+  await field.press('Enter');
   await expect(page.locator('body[data-ready]')).toBeAttached({ timeout: 10_000 });
   return frameGen(page);
 }

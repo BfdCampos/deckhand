@@ -256,3 +256,59 @@ test.describe('deck states', () => {
     await diskEventually(file, (s) => s.includes('>Still editable</h1>'));
   });
 });
+
+test.describe('navigation safety', () => {
+  const OTHER = '<!DOCTYPE html><html><head><title>Other</title></head><body><section class="slide"><h1>Other deck</h1></section><section class="slide"><h2>Two</h2></section></body></html>';
+
+  test('a link to another file asks before opening it', async ({ page, deckhand }) => {
+    const other = await writeDeck(deckhand.home, 'other.html', OTHER);
+    await page.goto(`${deckhand.url}/edit?deck=${encodeURIComponent(other)}`);
+    await expect(page.locator('.landing')).toBeVisible();
+    await expect(page.locator('.picker-manual input')).toHaveValue(other);
+    await expect(page.locator('.home-offer')).toBeVisible();
+    const state = await (await page.request.get(`${deckhand.url}/api/state`)).json();
+    expect(state.deck.name).toBe('basic.html');
+
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page.locator('.topbar-name')).toHaveText('other.html');
+  });
+
+  test('reloads never add history, and Back after opening another deck writes nothing', async ({ page, deckhand }) => {
+    const gen = await openEditor(page, deckhand);
+    const length = await page.evaluate(() => history.length);
+    await fs.appendFile(deckhand.deckPath, '\n<!-- one -->\n');
+    await waitForReload(page, gen);
+    expect(await page.evaluate(() => history.length)).toBe(length);
+
+    const other = await writeDeck(deckhand.home, 'other.html', OTHER);
+    await page.getByRole('button', { name: '← Home' }).click();
+    await page.locator('.picker-manual input').fill(other);
+    await page.locator('.picker-manual input').press('Enter');
+    await expect(page.locator('.topbar-name')).toHaveText('other.html');
+    await expect(deckFrame(page).locator('h1')).toHaveText('Other deck');
+
+    await page.goBack();
+    await expect(page.locator('.landing')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await readDisk(other)).toBe(OTHER);
+  });
+
+  test('a tab whose deck was replaced in another tab stops editing until you choose', async ({ page, deckhand }) => {
+    await openEditor(page, deckhand);
+    const other = await writeDeck(deckhand.home, 'other.html', OTHER);
+    const second = await page.context().newPage();
+    await openDeckAt(second, deckhand, other);
+
+    const banner = page.locator('.banner', { hasText: 'other.html was opened in another tab, so this deck is closed.' });
+    await expect(banner).toBeVisible();
+    await expect(page.locator('.topbar-name')).toHaveText('basic.html');
+    await expect(page.getByRole('button', { name: 'Text', exact: true })).toBeDisabled();
+    await deckFrame(page).locator('h1').dblclick();
+    await expect(deckFrame(page).locator('h1')).not.toHaveAttribute('contenteditable', 'true');
+
+    await banner.getByRole('button', { name: 'Switch to other.html' }).click();
+    await expect(page.locator('.topbar-name')).toHaveText('other.html');
+    await expect(deckFrame(page).locator('h1')).toHaveText('Other deck');
+    await second.close();
+  });
+});
