@@ -502,7 +502,7 @@ describe('deck routes over HTTP', () => {
     await waitFor(() => events.find((e) => e.type === 'hello'));
     const hello = events.find((e) => e.type === 'hello');
     assert.ok(hello.state.deck.deckId);
-    assert.ok(events.find((e) => e.type === 'notes'), 'notes snapshot on connect');
+    await waitFor(() => events.find((e) => e.type === 'notes'));
 
     const other = path.join(path.dirname(dh.deckPath), 'other.html');
     fs.writeFileSync(other, '<section class="slide"><h1>Other</h1></section>');
