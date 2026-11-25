@@ -42,7 +42,7 @@ async function setup({ agents = ['claude'], deck = 'basic.html', notes = ['Make 
   const agentsMod = createAgents({ config: { extraBinDirs: [] }, store, broadcast: hub.broadcast, env: fullEnv, log: () => {} });
   await agentsMod.detect();
   const runs = createRuns({
-    config: { decksDir, home }, session, notes: notesMod, agents: agentsMod, store, broadcast: hub.broadcast, env: fullEnv, tmpDir: tmp,
+    config: { decksDir, home }, session, notes: notesMod, agents: agentsMod, store, broadcast: hub.broadcast, env: fullEnv, tmpDir: tmp, log: () => {},
   });
   live.push(runs);
   await session.open(deckPath);
