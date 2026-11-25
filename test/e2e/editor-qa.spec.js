@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { test, expect } from './fixtures.js';
+import { test, expect, SERVER_RESTART_NOISE } from './fixtures.js';
 import {
   deckFrame, readDisk, stripAnchors, sidecar, openEditor, openDeckAt, frameGen, diskEventually, blurEditing,
   dragBy, caretToEnd, writeDeck, png, REPO,
@@ -180,7 +180,7 @@ test.describe('M3 moves keep the element\'s own transform', () => {
 });
 
 test.describe('M2 restart mid-edit', () => {
-  test.use({ deckhandOptions: {}, allowedConsoleErrors: [/WebSocket connection to .* failed|ERR_CONNECTION_REFUSED|Failed to load resource/] });
+  test.use({ deckhandOptions: {}, allowedConsoleErrors: [SERVER_RESTART_NOISE] });
 
   test('keeps the typed text and saves it once Deckhand is back', async ({ page, deckhand }) => {
     const file = await writeDeck(deckhand.home, 'restart.html', await readDisk(path.join(REPO, BASIC)));

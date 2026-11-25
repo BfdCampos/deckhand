@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures.js';
+import { test, expect, SERVER_RESTART_NOISE } from './fixtures.js';
 import { deckFrame, readDisk, sidecar, openEditor, diskEventually } from './editor-helpers.js';
 
 test.use({ deckhandOptions: { deck: 'test/fixtures/decks/basic.html' } });
@@ -95,7 +95,7 @@ test('AC-42 notes edit inline from the sidebar and the pin, and delete cleanly',
 });
 
 test.describe('server restart', () => {
-  test.use({ allowedConsoleErrors: [/WebSocket connection to .* failed/] });
+  test.use({ allowedConsoleErrors: [SERVER_RESTART_NOISE] });
 
   test('AC-43 notes and pins survive a refresh and a server restart', async ({ page, deckhand }) => {
     await openEditor(page, deckhand);

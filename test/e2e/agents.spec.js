@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures.js';
+import { test, expect, SERVER_RESTART_NOISE } from './fixtures.js';
 import { BASIC, THREE, addNotes, openEditor, postApi, runs, handoff, card, chip } from './runs-helpers.js';
 
 test.use({ deckhandOptions: { deck: BASIC, agents: ['claude'] } });
@@ -22,9 +22,7 @@ test.describe('with both agents', () => {
   test.use({ deckhandOptions: { deck: BASIC, agents: ['claude', 'codex'] } });
 
   test.describe('across a restart', () => {
-    test.use({ allowedConsoleErrors: [[
-      /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/ws' failed: .*ERR_CONNECTION_REFUSED/,
-    ]] });
+    test.use({ allowedConsoleErrors: [SERVER_RESTART_NOISE] });
 
     test('AC-7 the chip is a keyboard dropdown, the choice survives a restart and drives the next run', async ({ page, deckhand }) => {
       await addNotes(deckhand, THREE);

@@ -10,6 +10,12 @@ const asList = (value) => [value ?? []].flat(Infinity).filter((v) => v !== undef
 
 const isHarnessNoise = (msg) => HARNESS_NOISE.test(msg.text()) && msg.location().url === 'about:srcdoc';
 
+// Chrome's own console lines while a test deliberately stops or restarts the server.
+export const SERVER_RESTART_NOISE = [
+  /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/ws' failed: /,
+  /^Failed to load resource: net::ERR_CONNECTION_REFUSED$/,
+];
+
 export const test = base.extend({
   deckhandOptions: [{}, { option: true }],
   allowedConsoleErrors: [[], { option: true }],
