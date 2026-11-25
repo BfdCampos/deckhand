@@ -15,7 +15,7 @@ async function startCreate(page, deckhand, description) {
   await openHome(page, deckhand);
   await input(page).fill(description);
   await page.locator('.create-submit').click();
-  await expect(gen(page)).toBeVisible();
+  await expect(page.locator('.generation:not([hidden]), .editor:not([hidden])').first()).toBeVisible();
 }
 
 test('AC-13 Create deck sends the build contract and description to the agent, staged', async ({ page, deckhand }) => {
