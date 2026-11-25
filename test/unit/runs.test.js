@@ -330,6 +330,17 @@ describe('edit runs', () => {
     assert.ok(Date.now() - t0 < 2500, `took ${Date.now() - t0} ms`);
   });
 
+  test('once the agent itself exits, children that ignore SIGTERM are killed straight away', async () => {
+    const t = await setup();
+    t.setScenario(scenarioFile(t.root, [{ emit: 'init' }, { hang: true, child: 'ignore-term' }]));
+    const run = await t.runs.start({ kind: 'edit', scope: 'all' });
+    const child = await waitFor(() => readAgentLog(t.logPath, { mode: 'child' })[0]);
+    const t0 = Date.now();
+    await t.runs.stop(run.id);
+    await waitFor(() => !pidAlive(child.pid) && !pidAlive(child.childPid), { timeout: 2000 });
+    assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
+  });
+
   test('AC-4 stopAll kills the agent and its children within 2 s', async () => {
     const t = await setup({ scenario: 'hang-with-child' });
     await t.runs.start({ kind: 'edit', scope: 'all' });
