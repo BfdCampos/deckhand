@@ -399,7 +399,8 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     if (pid) {
       killGroup(pid, 'SIGTERM');
       const deadline = Date.now() + KILL_GRACE_MS;
-      while (groupAlive(pid) && Date.now() < deadline) await sleep(50);
+      const leaderGone = () => run.child.exitCode !== null || run.child.signalCode !== null;
+      while (groupAlive(pid) && !leaderGone() && Date.now() < deadline) await sleep(50);
       if (groupAlive(pid)) killGroup(pid, 'SIGKILL');
       await Promise.race([run.exited, sleep(500)]);
     }
@@ -465,6 +466,7 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     const noteId = query.get('scope') === 'note' ? query.get('noteId') : null;
     const open = notes.list().filter((n) => n.status === 'open' && (!noteId || n.id === noteId));
     if (noteId && !open.length) throw new HttpError(404, 'no_note', 'That note no longer exists.');
+    await session.flushAnchors();
     const guard = guardrail({ kind: 'edit', deck: meta.path, workOrder: meta.workOrderPath });
     return {
       prompt: `${guard}\n\n${editPrompt({ deck: meta.path, workOrder: meta.workOrderPath, notes: open, noteId })}`,

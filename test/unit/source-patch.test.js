@@ -349,14 +349,16 @@ describe('large decks', () => {
     const slides = Array.from({ length: 100 }, (_, i) => `<section class="slide"><h2>Slide ${i}</h2><p>${filler}</p><ul><li>a<li>b</ul></section>\n`).join('');
     const src = `<!doctype html><html><head><style>.slide{height:100vh}</style></head><body>\n${slides}</body></html>`;
     assert.ok(src.length > 9_000_000);
-    const t0 = Date.now();
+    const cpu0 = process.cpuUsage();
     const anchored = anchorSource(src).source;
     const index = indexSource(anchored);
     const [aiId] = [...index.ids].find(([, t]) => t === 'h2');
     const plan = planOp(index, { type: 'setInner', aiId, tag: 'h2', before: 'Slide 0', after: 'First' });
     const out = applySplices(anchored, plan.splices).source;
     plan.verify(indexSource(out));
-    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+    const { user, system } = process.cpuUsage(cpu0);
+    const ms = Math.round((user + system) / 1000);
+    assert.ok(ms < 5000, `took ${ms} ms of CPU`);
     assert.equal(out.length, anchored.length - 2);
   });
 });

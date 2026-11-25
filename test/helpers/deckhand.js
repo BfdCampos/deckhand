@@ -114,10 +114,13 @@ export async function startDeckhand({
     agentLog: (query) => readAgentLog(logPath, query),
     async restart() {
       const port = dh.port;
-      await stop();
-      await start(['--port', String(port)]);
-      if (dh.port !== port) throw new Error(`Deckhand came back on port ${dh.port}, not ${port}`);
-      return dh;
+      for (let attempt = 1; ; attempt++) {
+        await stop();
+        await start(['--port', String(port)]);
+        if (dh.port === port) return dh;
+        if (attempt === 3) throw new Error(`Deckhand came back on port ${dh.port}, not ${port}`);
+        await new Promise((r) => setTimeout(r, 200));
+      }
     },
     stop,
     setAgents(list) {

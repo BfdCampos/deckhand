@@ -420,7 +420,7 @@ describe('deck routes over HTTP', () => {
     const served = await (await fetch(dh.url + state.deck.url)).text();
     const h2 = /<h2 data-ai-id="(dh\d+)">/.exec(served)[1];
     await post('/api/notes', { deckId: state.deck.deckId, op: 'add', note: { aiId: h2, targetTag: 'h2', text: 'Bigger' } });
-    const res = await fetch(dh.url + '/api/prompt?scope=all');
+    const res = await fetch(dh.url + '/api/prompt?scope=all', { headers: { Origin: origin } });
     assert.equal(res.status, 200);
     const { workOrderPath } = await res.json();
     assert.ok(fs.readFileSync(workOrderPath, 'utf8').includes(`data-ai-id="${h2}"`));
