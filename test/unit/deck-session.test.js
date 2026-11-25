@@ -366,7 +366,9 @@ describe('deck routes over HTTP', () => {
     const state = await (await fetch(dh.url + '/api/state')).json();
     const deck = state.deck;
     assert.equal(deck.path, dh.deckPath);
-    assert.equal(state.deckPath, dh.deckPath, 'legacy fields kept until PR4');
+    for (const legacy of ['bound', 'deckPath', 'base', 'deckUrl', 'notesJson', 'notesMd']) assert.equal(legacy in state, false, legacy);
+    const old = await post('/api/open', { path: dh.deckPath });
+    assert.equal(old.status, 404, 'the legacy open route is gone');
     const served = await (await fetch(dh.url + deck.url)).text();
     assert.match(served, /<h2 data-ai-id="(dh\d+)">Plain slide<\/h2>/);
     assert.equal(fs.readFileSync(dh.deckPath, 'utf8').includes('data-ai-id'), false, 'viewing does not write');
