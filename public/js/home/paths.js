@@ -4,6 +4,7 @@ export const OPEN_COPY = {
   is_dir: "That's a folder. Pick an .html file inside it.",
   empty: 'That file is empty.',
   unreadable: "Deckhand can't read that file (permission denied).",
+  run_active: 'Opening another deck has to wait until the agent finishes.',
 };
 
 export const openErrorText = (err) => OPEN_COPY[err?.code] || err?.message || "Deckhand couldn't open that file.";
