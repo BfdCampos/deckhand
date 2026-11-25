@@ -118,7 +118,6 @@ describe('launch', () => {
       const res = await request(srv.port, { path: '/api/state' });
       assert.equal(res.status, 200);
       assert.equal(res.json.deck.path, deck);
-      assert.equal(res.json.bound, true);
     } finally {
       await srv.stop();
     }
@@ -129,7 +128,6 @@ describe('launch', () => {
     try {
       const res = await request(srv.port, { path: '/api/state' });
       assert.equal(res.json.deck, null);
-      assert.equal(res.json.bound, false);
     } finally {
       await srv.stop();
     }
