@@ -482,3 +482,39 @@ describe('m6 setInner refuses new scripts, handlers and styles', () => {
     planOp(idx, { type: 'setInner', aiId: id, tag: 'p', before: 'Hi <a href="#x" onclick="go()">go</a>', after: 'Hello <a href="#x" onclick="go()">go</a>' });
   });
 });
+
+describe('M3 m2 n6 style and slide rules', () => {
+  const style = (html, props) => {
+    const s = anchorSource(html).source;
+    const idx = indexSource(s);
+    const [aiId, tag] = [...idx.ids].find(([, t]) => t === 'img' || t === 'h3');
+    const plan = planOp(idx, { type: 'setStyle', aiId, tag, props });
+    return { before: s, after: applySplices(s, plan.splices).source, plan };
+  };
+
+  test('M3 the translate property composes with an existing transform', () => {
+    const { before, after, plan } = style('<body><img style="transform: rotate(5deg); width: 60px" src=a.png></body>', { translate: '40px 0px' });
+    assert.equal(after, before.replace('width: 60px"', 'width: 60px; translate: 40px 0px;"'));
+    assert.deepEqual(plan.tweak.next, { kind: 'move', tag: 'img', dx: 40, dy: 0 });
+  });
+
+  test('M3 a centred heading moved with translate keeps its transform', () => {
+    const { after, plan } = style('<body><h3 class="centre" style="transform: translateX(-50%)">Centred</h3></body>', { translate: '30px -4px' });
+    assert.match(after, /transform: translateX\(-50%\); translate: 30px -4px;/);
+    assert.deepEqual(plan.tweak.next, { kind: 'move', tag: 'h3', dx: 30, dy: -4 });
+  });
+
+  test('n6 style values must look like lengths or transforms', () => {
+    for (const props of [{ width: '1px) url(http' }, { width: 'calc(1px)' }, { transform: 'translate(1px) url(x)' }, { translate: '1px 2px 3px 4px' }, { height: 'expression(alert(1))' }]) {
+      assert.throws(() => style('<body><img src=a.png></body>', props), (e) => e.code === 'bad_op', JSON.stringify(props));
+    }
+    for (const props of [{ width: '240px', height: '50%' }, { 'max-width': 'none' }, { transform: 'translate(1px, -2.5px) rotate(5deg)' }, { translate: '30px' }, { width: 'auto' }]) {
+      style('<body><img src=a.png></body>', props);
+    }
+  });
+
+  test('m2 sections anywhere count as slides, as the editor counts them', () => {
+    assert.equal(indexSource('<body><div class="reveal"><div class="slides"><section><h1>A</h1></section><section>B</section></div></div></body>').hasSlides, true);
+    assert.equal(indexSource('<body><main><p>Just a page</p></main></body>').hasSlides, false);
+  });
+});
