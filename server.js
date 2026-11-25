@@ -8,6 +8,7 @@ import { createHub } from './src/server/hub.js';
 import { createStore } from './src/server/store.js';
 import { tildify } from './src/server/files.js';
 import { homeRoutes } from './src/server/home-routes.js';
+import { openBrowser } from './src/server/open.js';
 import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
@@ -141,5 +142,11 @@ if (config.deckPath) {
   }
 }
 
+const url = `http://127.0.0.1:${port}`;
 const agent = runs.claudePath() ? 'Claude Code' : 'none found';
-console.log(`\n  Deckhand is running at http://127.0.0.1:${port}\n  Agent: ${agent}\n  Press Ctrl+C to stop.\n`);
+console.log(`\n  Deckhand is running at ${url}\n  Agent: ${agent}\n  Press Ctrl+C to stop.\n`);
+
+if (config.open) {
+  const deck = session.meta();
+  openBrowser(deck ? `${url}/edit?deck=${encodeURIComponent(deck.path)}` : `${url}/`);
+}
