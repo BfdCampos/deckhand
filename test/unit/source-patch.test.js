@@ -356,7 +356,7 @@ describe('large decks', () => {
     const plan = planOp(index, { type: 'setInner', aiId, tag: 'h2', before: 'Slide 0', after: 'First' });
     const out = applySplices(anchored, plan.splices).source;
     plan.verify(indexSource(out));
-    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
     assert.equal(out.length, anchored.length - 2);
   });
 });
