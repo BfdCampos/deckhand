@@ -33,6 +33,14 @@ function snippet(text) {
   return text ? `'${text.slice(0, 60)}${text.length > 60 ? '…' : ''}'` : '';
 }
 
+function popTarget(el, target) {
+  const isSlide = el.matches(SLIDE_SEL);
+  const what = isSlide ? `slide${target.slide ? ` ${target.slide}` : ''}` : el.hasAttribute('data-editable') ? 'text box' : targetLabel(target.tag);
+  const text = isSlide ? '' : el.matches(IMG_SEL) ? (el.getAttribute('alt') || '') : target.text;
+  const quote = snippet(text);
+  return h('div', { class: 'note-pop-target t-meta' }, `On ${what}`, quote ? ': ' : '', quote ? h('span', { class: 'text-ink' }, quote) : null);
+}
+
 export function mountNotes(ctx) {
   const count = h('span', { class: 'pill-count' }, '0');
   const list = h('div', { class: 'notes-list' });
@@ -122,7 +130,6 @@ export function mountNotes(ctx) {
     submitOnModEnter(text, save);
 
     const fr = frameEl().getBoundingClientRect();
-    const label = snippet(target.text);
     const pop = openPopover({
       x: fr.left + e.clientX,
       y: fr.top + e.clientY,
@@ -132,7 +139,7 @@ export function mountNotes(ctx) {
       canDismiss: () => text.value.trim() === '',
       onClose: () => { if (notePop === pop) notePop = null; },
       content: h('div', { class: 'note-pop-body' },
-        h('div', { class: 't-meta' }, `On ${target.tag === 'section' || t.matches(SLIDE_SEL) ? 'slide' : targetLabel(target.tag)}`, label ? ': ' : '', label ? h('span', { class: 'text-ink' }, label) : null),
+        popTarget(t, target),
         text,
         h('label', { class: 'check' }, scope, 'Apply to all similar elements'),
         h('div', { class: 'row gap-2 end' },
@@ -249,7 +256,9 @@ export function mountNotes(ctx) {
     if (inline && !ctx.notes.some((n) => n.id === inline.id)) { inline.popEscape(); inline = null; }
     count.textContent = ctx.notes.filter(isOpen).length;
     if (!ctx.notes.length) {
-      list.replaceChildren(h('p', { class: 'notes-empty t-meta' }, 'No notes yet. Right-click anything on a slide to tell the AI what to change.'));
+      list.replaceChildren(h('div', { class: 'notes-empty-state' },
+        h('span', { class: 'notes-empty-icon' }, icon('note')),
+        h('p', { class: 'notes-empty t-small text-muted' }, 'No notes yet. Right-click anything on a slide to tell the AI what to change.')));
     } else {
       list.replaceChildren(...ctx.notes.map(card));
     }
