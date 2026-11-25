@@ -1,7 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 import { expect } from './fixtures.js';
+
+export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export const deckFrame = (page) => page.frameLocator('iframe#deck');
 
@@ -100,4 +103,15 @@ export async function addImage(page, { name = 'wide.png', width = 200, height = 
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Image', exact: true }).click();
   await (await chooser).setFiles({ name, mimeType: 'image/png', buffer: buffer ?? png(width, height) });
+}
+
+export async function caretToEnd(locator) {
+  await locator.evaluate((el) => {
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = el.ownerDocument.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
 }

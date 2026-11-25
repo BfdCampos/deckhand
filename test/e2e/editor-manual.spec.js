@@ -3,7 +3,7 @@ import path from 'node:path';
 import { test, expect } from './fixtures.js';
 import {
   deckFrame, readDisk, stripAnchors, sidecar, openEditor, openDeckAt, waitForReload, frameGen,
-  expectSaved, diskEventually, blurEditing, dragBy, addImage, writeDeck,
+  expectSaved, diskEventually, blurEditing, dragBy, addImage, writeDeck, REPO, caretToEnd,
 } from './editor-helpers.js';
 
 const BASIC = 'test/fixtures/decks/basic.html';
@@ -75,9 +75,9 @@ test.describe('manual edits', () => {
   test('AC-33 Delete removes the selection, but not while editing text', async ({ page, deckhand }) => {
     await openEditor(page, deckhand);
     const frame = deckFrame(page);
-    const p = frame.locator('p', { hasText: 'The first slide.' });
+    const p = frame.locator('section').first().locator('p');
     await p.dblclick();
-    await page.keyboard.press('End');
+    await caretToEnd(p);
     await page.keyboard.press('Backspace');
     await blurEditing(page);
     await diskEventually(deckhand.deckPath, (s) => s.includes('>The first slide</p>'));
@@ -159,7 +159,7 @@ test.describe('manual edits', () => {
     await expect(page.locator('.sel-box')).toBeHidden();
 
     await h1.dblclick();
-    await page.keyboard.press('End');
+    await caretToEnd(h1);
     await page.keyboard.type(' again');
     await page.keyboard.press('Escape');
     await expect(h1).not.toHaveAttribute('contenteditable', 'true');
@@ -168,6 +168,8 @@ test.describe('manual edits', () => {
 });
 
 test.describe('reloads', () => {
+  test.use({ allowedConsoleErrors: [/status of 409 \(Conflict\)/] });
+
   test('AC-36 an external change and a refresh both keep the slide in view', async ({ page, deckhand }) => {
     let gen = await openEditor(page, deckhand);
     await page.locator('.dock-tile').nth(1).click();
@@ -186,6 +188,7 @@ test.describe('reloads', () => {
   });
 
   test('AC-37 an external write reloads with a toast, waiting for a text edit to finish', async ({ page, deckhand }) => {
+    test.info().annotations.push({ type: 'note', description: 'the edit made during the external write is refused with 409 deck_changed' });
     let gen = await openEditor(page, deckhand);
     const text = (await readDisk(deckhand.deckPath)).replace('Thanks for watching.', 'Thanks for reading.');
     await fs.writeFile(deckhand.deckPath, text);
@@ -221,6 +224,7 @@ test.describe('reloads', () => {
     await page.keyboard.type('!');
     await blurEditing(page);
     await diskEventually(deckhand.deckPath, (s) => /<h1[^>]*>!?Basic deck!?<\/h1>/.test(s) && s.includes('!'));
+    await page.waitForTimeout(400);
     await fs.appendFile(deckhand.deckPath, '\n<!-- external -->\n');
     await waitForReload(page, gen);
     await expect(page.locator('.toast', { hasText: 'Undo history cleared' })).toBeVisible();
@@ -231,7 +235,7 @@ test.describe('deck states', () => {
   test.use({ deckhandOptions: {} });
 
   test('a read-only deck shows the banner and refuses edits', async ({ page, deckhand }) => {
-    const file = await writeDeck(deckhand.home, 'locked.html', await readDisk(path.resolve(BASIC)));
+    const file = await writeDeck(deckhand.home, 'locked.html', await readDisk(path.join(REPO, BASIC)));
     await fs.chmod(file, 0o444);
     await openDeckAt(page, deckhand, file);
     await expect(page.locator('.banner', { hasText: "This file is read-only. You can browse it and copy prompts, but edits won't save." })).toBeVisible();

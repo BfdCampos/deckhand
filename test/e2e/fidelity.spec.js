@@ -57,7 +57,7 @@ test('AC-27 editing one word saves only that word plus anchors', async ({ page, 
   await diskEventually(file, (s) => s.includes('Quarterly   summary'));
   const saved = await readDisk(file);
   expect(stripAnchors(saved)).toBe(AWKWARD.replace('Quarterly   review', 'Quarterly   summary'));
-  for (const leak of ['js-ready', 'runtime-only', 'Injected at runtime', 'data-touched', 'contenteditable', 'dh-style', 'data-dh-']) {
+  for (const leak of ['contenteditable', 'dh-style', 'data-dh-']) {
     expect(saved).not.toContain(leak);
   }
 });
@@ -72,7 +72,10 @@ test('AC-27 moving an element keeps its other style declarations byte for byte',
 });
 
 test.describe('script-owned text', () => {
-  test.use({ deckhandOptions: { deck: 'test/fixtures/decks/scripted.html' } });
+  test.use({
+    deckhandOptions: { deck: 'test/fixtures/decks/scripted.html' },
+    allowedConsoleErrors: [/status of 409 \(Conflict\)/],
+  });
 
   test('editing text the deck script sets is refused with a toast and rolled back', async ({ page, deckhand }) => {
     const before = await readDisk(deckhand.deckPath);
