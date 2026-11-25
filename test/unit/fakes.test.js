@@ -376,3 +376,43 @@ describe('recorded streams', () => {
     }
   });
 });
+
+describe('scenario files', () => {
+  const dir = path.join(FIXTURES, 'scenarios');
+  const KNOWN = new Set(['emit', 'file', 'tool', 'text', 'isError', 'delay', 'content', 'contentFrom', 'replace', 'regex',
+    'write', 'tick', 'hang', 'ignoreTerm', 'child', 'exit', 'stderr']);
+
+  test('every scenario parses and uses only known step fields', () => {
+    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+      const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      const lists = Array.isArray(s) ? [s] : [s.steps, s.edit, s.create].filter(Boolean);
+      assert.ok(lists.length, `${f} has steps`);
+      for (const step of lists.flat()) for (const k of Object.keys(step)) assert.ok(KNOWN.has(k), `${f}: unknown field ${k}`);
+    }
+  });
+
+  test('tick-two ticks only the first two open notes', async () => {
+    const cwd = makeStaging({ notes: [{ id: 'n_a', text: 'a' }, { id: 'n_b', text: 'b' }, { id: 'n_c', text: 'c' }] });
+    const run = await runFake('claude', CLAUDE_ARGS, { stdin: `[[fake:tick-two]] ${EDIT_PROMPT}`, cwd });
+    assert.equal(run.code, 0);
+    const md = fs.readFileSync(path.join(cwd, 'deck.deckhand.md'), 'utf8');
+    assert.deepEqual([...md.matchAll(/^- \[(.)\] (n_\w+):/gm)].map((m) => `${m[2]}=${m[1]}`), ['n_a=x', 'n_b=x', 'n_c= ']);
+  });
+
+  test('long-run edits early and keeps talking', async () => {
+    const cwd = makeStaging();
+    const started = Date.now();
+    const run = await runFake('claude', CLAUDE_ARGS, { stdin: `[[fake:long-run]] ${EDIT_PROMPT}`, cwd });
+    assert.ok(Date.now() - started >= 3000);
+    const texts = run.lines.filter((l) => l.type === 'assistant').flatMap((l) => l.message.content).filter((c) => c.type === 'text');
+    assert.equal(texts.length, 9);
+  });
+
+  test('fail-mid-run edits, then fails with its error', async () => {
+    const cwd = makeStaging();
+    const run = await runFake('codex', codexArgs(cwd), { stdin: `[[fake:fail-mid-run]] ${EDIT_PROMPT}` });
+    assert.equal(run.code, 1);
+    assert.match(fs.readFileSync(path.join(cwd, 'deck.html'), 'utf8'), /Edited: Basic deck/);
+    assert.deepEqual(run.lines.at(-1), { type: 'turn.failed', error: { message: 'The agent hit an error halfway through.' } });
+  });
+});
