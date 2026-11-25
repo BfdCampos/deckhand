@@ -63,6 +63,18 @@ export function createActivityCard() {
   let lastKey = null;
   let tick = null;
   let tone = 'idle';
+  let shownError = '';
+
+  const norm = (t) => String(t || '').replace(/…$/, '').trim();
+  function repeatsError(line) {
+    if ((line.kind || 'status') !== 'error' || !shownError) return false;
+    const a = norm(line.text);
+    return !!a && (a === shownError || shownError.startsWith(a) || a.startsWith(shownError));
+  }
+
+  function syncEmpty() {
+    list.hidden = !list.querySelector('.activity-line:not([hidden])');
+  }
 
   function nearBottom() {
     return list.scrollHeight - list.scrollTop - list.clientHeight < STICK_PX;
@@ -89,7 +101,10 @@ export function createActivityCard() {
     lastRow?.classList.remove('is-live');
     lastRow = row(line, animate);
     lastKey = key;
+    if (repeatsError(line)) lastRow.hidden = true;
+    lastRow.lineData = line;
     list.append(lastRow);
+    syncEmpty();
     if (tone === 'working') lastRow.classList.add('is-live');
     if (stick) list.scrollTop = list.scrollHeight;
   }
@@ -115,6 +130,7 @@ export function createActivityCard() {
       lastRow = null;
       lastKey = null;
       for (const line of lines) add(line, false);
+      syncEmpty();
       list.scrollTop = list.scrollHeight;
     },
     append(line) {
@@ -124,9 +140,12 @@ export function createActivityCard() {
       summary.textContent = text || '';
       summary.hidden = !text;
     },
-    setError(text) {
-      errorBox.textContent = text || '';
-      errorBox.hidden = !text;
+    setError(text, { box = true } = {}) {
+      shownError = norm(text);
+      errorBox.textContent = box ? text || '' : '';
+      errorBox.hidden = !box || !text;
+      for (const r of list.querySelectorAll('.activity-line.kind-error')) r.hidden = repeatsError(r.lineData || {});
+      syncEmpty();
     },
     setActions(items = []) {
       actions.replaceChildren(...items.map((a) => h('button', {
