@@ -76,8 +76,8 @@ export function openBrowse({ openDeck, home }) {
       onclick: () => choose(e),
     }, icon(e.kind === 'dir' ? 'folder' : 'deck'), h('span', { class: 'browse-name' }, e.name),
     e.kind === 'dir' ? icon('chevron-right', { size: 14, className: 'browse-go' }) : null))));
-    status.textContent = entries.length ? '' : 'No folders or decks here.';
-    status.hidden = !!entries.length;
+    if (!entries.length) list.append(h('li', { class: 'browse-empty t-meta' }, 'No folders or decks here.'));
+    status.hidden = true;
 
     const all = rows();
     const target = (focusPath && all.find((r) => r.dataset.path === focusPath)) || all[0];

@@ -302,3 +302,5 @@
 .home-continue { align-self: flex-start; margin-top: var(--space-2); max-width: 100%; }
 .open-busy { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); color: var(--ink-2); background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-control); }
 .home-open.is-busy .recents { opacity: 0.55; }
+.browse-empty { padding: var(--space-6) var(--space-3); text-align: center; }
+.create-target { overflow: hidden; white-space: nowrap; }
