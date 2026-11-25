@@ -13,6 +13,7 @@ import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
 import { deckRoutes } from './src/server/deck-routes.js';
+import { createSample } from './src/server/sample.js';
 import { createAgents } from './src/server/agents/index.js';
 import { createRuns } from './src/server/runs.js';
 
@@ -33,6 +34,7 @@ const hubProxy = { broadcast };
 const store = createStore({ stateDir: config.stateDir });
 const notes = createNotes({ hub: hubProxy });
 const session = createDeckSession({ hub: hubProxy, store, notes, home: config.home });
+const sample = createSample({ config, store });
 const assets = createAssets({ session });
 const agents = createAgents({ config, store, broadcast });
 const runs = createRuns({ config, session, notes, agents, store, broadcast });
@@ -61,7 +63,7 @@ function stateSnapshot() {
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  ...deckRoutes({ session, notes }),
+  ...deckRoutes({ session, notes, sample }),
   ...homeRoutes({ store, config }),
   ...assets.routes,
   ...agents.routes({ isBusy: runs.isBusy }),
@@ -141,7 +143,7 @@ try {
 
 if (config.deckPath) {
   try {
-    await session.open(config.deckPath);
+    await session.open(await sample.resolve(config.deckPath));
   } catch (e) {
     console.error(`Couldn't open ${config.deckPath}: ${e.message}`);
   }

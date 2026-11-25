@@ -18,6 +18,7 @@ function sanitise(raw) {
   const data = empty();
   if (!raw || typeof raw !== 'object') return data;
   if (typeof raw.agent === 'string' && raw.agent) data.agent = raw.agent;
+  if (typeof raw.sampleCopy === 'string' && path.isAbsolute(raw.sampleCopy)) data.sampleCopy = raw.sampleCopy;
   const seen = new Set();
   for (const r of Array.isArray(raw.recents) ? raw.recents : []) {
     if (!r || typeof r.path !== 'string' || !path.isAbsolute(r.path) || seen.has(r.path)) continue;
