@@ -146,8 +146,7 @@ describe('ops keep every untouched byte', () => {
           assert.equal(source.slice(0, first), anchored.slice(0, first), `${name} ${op.type} ${aiId} prefix`);
           assert.equal(source.slice(last + delta), anchored.slice(last), `${name} ${op.type} ${aiId} suffix`);
           if (op.type === 'setInner') {
-            assert.equal(first, info.innerStart);
-            assert.equal(last, info.innerEnd);
+            assert.ok(first >= info.innerStart && last <= info.innerEnd, 'text edits stay inside the element');
           } else if (op.type === 'remove') {
             assert.deepEqual([first, last], [info.start, info.end]);
           } else if (op.type === 'setStyle') {
@@ -195,10 +194,19 @@ describe('setInner', () => {
     assert.throws(() => planOp(index, { type: 'setInner', aiId: 'dh404', tag: 'p', before: '', after: 'x' }), (e) => e.code === 'anchor_missing');
   });
 
-  test('an after that breaks out of the element is refused by verify', () => {
+  test('an after that tries to break out of the element cannot close it', () => {
     const plan = planOp(index, { type: 'setInner', aiId: h1, tag: 'h1', before: 'Title', after: 'x</h1></section><section><h1>y' });
     const out = applySplices(src, plan.splices).source;
-    assert.throws(() => plan.verify(indexSource(out)), (e) => e.status === 400 && e.code === 'bad_op');
+    try {
+      plan.verify(indexSource(out));
+    } catch (e) {
+      assert.equal(e.code, 'bad_op');
+      return;
+    }
+    const before = index.get(h1);
+    const after = indexSource(out).get(h1);
+    assert.equal(out.slice(0, before.innerStart), src.slice(0, before.innerStart));
+    assert.equal(out.slice(after.end), src.slice(before.end), 'everything after the heading is untouched');
   });
 
   test('an after that duplicates an existing anchor is refused by verify', () => {
@@ -360,5 +368,117 @@ describe('large decks', () => {
     const ms = Math.round((user + system) / 1000);
     assert.ok(ms < 5000, `took ${ms} ms of CPU`);
     assert.equal(out.length, anchored.length - 2);
+  });
+});
+
+describe('B3 minimal text edits keep every untouched byte', () => {
+  const REVEAL = '<!doctype html>\n<body>\n<div class="reveal"><div class="slides">\n<section>\n  <h1 class=title>Fish &amp; Chips &nbsp;&mdash; caf&eacute;</h1>\n  <p id="ent">It&rsquo;s &copy; 2026 &lt;tag&gt; \u{1F41F} emoji<br/>second line</p>\n</section>\n<section>\n  <ul>\n    <li>One\n    <li>Two <b>bold</B>\n    <li>Three\n      <ul><li>Nested a<li>Nested b</ul>\n  </ul>\n  <pre id="code">a b</pre>\n  <p id="nb">a&nbsp;b</p>\n</section>\n</div></div>\n</body>\n';
+
+  function edit(src, re, before, after) {
+    const anchored = anchorSource(src).source;
+    const index = indexSource(anchored);
+    const aiId = re.exec(anchored)[1];
+    const info = index.get(aiId);
+    const plan = planOp(index, { type: 'setInner', aiId, tag: info.tag, before, after });
+    const out = applySplices(anchored, plan.splices).source;
+    plan.verify(indexSource(out));
+    return { anchored, out };
+  }
+
+  const cases = [
+    ['an entity-heavy heading, with Chrome turning the typed space into nbsp', /<h1 data-ai-id="(dh\d+)"/, 'Fish &amp; Chips &nbsp;— café', 'Fish &amp; Chips &nbsp;— café&nbsp;X', (s) => s.replace('caf&eacute;</h1>', 'caf&eacute; X</h1>')],
+    ['the same heading with a plain typed space', /<h1 data-ai-id="(dh\d+)"/, 'Fish &amp; Chips &nbsp;— café', 'Fish &amp; Chips &nbsp;— café X', (s) => s.replace('caf&eacute;</h1>', 'caf&eacute; X</h1>')],
+    ['entities, an emoji and <br/> around a one-word change', /<p data-ai-id="(dh\d+)" id="ent"/, 'It’s © 2026 &lt;tag&gt; \u{1F41F} emoji<br>second line', 'It’s © 2026 &lt;tag&gt; \u{1F41F} fish<br>second line', (s) => s.replace('emoji<br/>', 'fish<br/>')],
+    ['an implied-end li whose trailing newline the browser dropped', /<li data-ai-id="(dh\d+)">One/, 'One\n    ', 'Uno', (s) => s.replace('<li data-ai-id="dh5">One\n', '<li data-ai-id="dh5">Uno\n')],
+    ['an uppercase end tag next to a space Chrome made nbsp', /<li data-ai-id="(dh\d+)">Two/, 'Two <b>bold</b>\n    ', 'Dos&nbsp;<b>bold</b>\n    ', (s) => s.replace('>Two <b>bold</B>', '>Dos <b>bold</B>')],
+    ['a text change inside an uppercase element', /<li data-ai-id="(dh\d+)">Two/, 'Two <b>bold</b>\n    ', 'Two <b>bolder</b>\n    ', (s) => s.replace('<b>bold</B>', '<b>bolder</B>')],
+    ['a nested list with implied end tags', /<li data-ai-id="(dh\d+)">Three/, 'Three\n      <ul><li data-ai-id="dh8">Nested a</li><li data-ai-id="dh9">Nested b</li></ul>\n  ', 'Tres\n      <ul><li data-ai-id="dh8">Nested a</li><li data-ai-id="dh9">Nested b</li></ul>\n  ', (s) => s.replace('>Three\n', '>Tres\n')],
+    ['whitespace edits inside pre are kept exactly', /<pre data-ai-id="(dh\d+)"|<pre id="code" data-ai-id="(dh\d+)"/, 'a b', 'a  b', (s) => s.replace('>a b</pre>', '>a  b</pre>')],
+    ['a deliberate &nbsp; in the source survives', /<p data-ai-id="(dh\d+)" id="nb"/, 'a&nbsp;b', 'a&nbsp;bc', (s) => s.replace('a&nbsp;b</p>', 'a&nbsp;bc</p>')],
+  ];
+
+  for (const [name, re, before, after, expect] of cases) {
+    test(name, () => {
+      const src = name.includes('pre') ? REVEAL.replace('<pre id="code">', '<pre data-editable id="code">') : REVEAL;
+      const pattern = name.includes('pre') ? /<pre data-ai-id="(dh\d+)"/ : re;
+      const { anchored, out } = edit(src, pattern, before, after);
+      assert.equal(out, expect(anchored));
+    });
+  }
+
+  test('CRLF inside the edited element stays CRLF', () => {
+    const src = '<body>\r\n<section class="slide">\r\n<p>Line\r\ntwo and\r\nthree</p>\r\n</section>\r\n</body>\r\n';
+    const { anchored, out } = edit(src, /<p data-ai-id="(dh\d+)">/, 'Line\ntwo and\nthree', 'Line\ntwo or\nthree');
+    assert.equal(out, anchored.replace('two and\r\n', 'two or\r\n'));
+  });
+
+  test('new markup is inserted without touching the text around it', () => {
+    const src = '<body><section class="slide"><p>Plain &amp; simple paragraph</p></section></body>';
+    const { anchored, out } = edit(src, /<p data-ai-id="(dh\d+)">/, 'Plain &amp; simple paragraph', 'Plain &amp; <b>simple</b> paragraph');
+    assert.equal(out, anchored.replace('&amp; simple', '&amp; <b>simple</b>'));
+  });
+
+  test('typed text is escaped and plain spaces stay plain', () => {
+    const src = '<body><section class="slide"><p>ab cd</p></section></body>';
+    const { anchored, out } = edit(src, /<p data-ai-id="(dh\d+)">/, 'ab cd', 'ab Fish &amp; &lt;Chips&gt; cd');
+    assert.equal(out, anchored.replace('ab cd', 'ab Fish &amp; &lt;Chips&gt; cd'));
+  });
+
+  test('clearing the element empties it', () => {
+    const src = '<body><section class="slide"><h2>Gone <i>soon</i></h2></section></body>';
+    const { anchored, out } = edit(src, /<h2 data-ai-id="(dh\d+)">/, 'Gone <i>soon</i>', '');
+    assert.equal(out, anchored.replace('Gone <i>soon</i>', ''));
+  });
+
+  test('a follow-up edit after kept whitespace still matches the source', () => {
+    const first = edit(REVEAL, /<li data-ai-id="(dh\d+)">One/, 'One\n    ', 'Uno');
+    const index = indexSource(first.out);
+    const plan = planOp(index, { type: 'setInner', aiId: 'dh5', tag: 'li', before: 'Uno', after: 'Unos' });
+    const out = applySplices(first.out, plan.splices).source;
+    plan.verify(indexSource(out));
+    assert.equal(out, first.out.replace('>Uno\n', '>Unos\n'));
+  });
+
+  test('a one-word edit changes only that word across the corpus', () => {
+    let checked = 0;
+    for (const src of Object.values(CORPUS)) {
+      const anchored = anchorSource(src).source;
+      const index = indexSource(anchored);
+      for (const aiId of index.ids.keys()) {
+        const info = index.get(aiId);
+        const before = domInner(anchored, aiId);
+        const m = /(?:^|>|\s)([A-Za-z]{4,})(?=[\s<]|$)/.exec(before);
+        if (!m || before.split(m[1]).length !== 2 || anchored.split(m[1]).length !== 2) continue;
+        let plan;
+        try {
+          plan = planOp(index, { type: 'setInner', aiId, tag: info.tag, before, after: before.replace(m[1], 'Zebra') });
+        } catch (e) {
+          assert.ok([400, 409].includes(e.status));
+          continue;
+        }
+        const out = applySplices(anchored, plan.splices).source;
+        plan.verify(indexSource(out));
+        assert.equal(out, anchored.replace(m[1], 'Zebra'), `${aiId} ${m[1]}`);
+        checked++;
+      }
+    }
+    assert.ok(checked > 10, `checked ${checked}`);
+  });
+});
+
+describe('m6 setInner refuses new scripts, handlers and styles', () => {
+  const src = anchorSource('<body><section class="slide"><p>Hello</p></section></body>').source;
+  const index = indexSource(src);
+  const p = [...index.ids].find(([, t]) => t === 'p')[0];
+  for (const after of ['Hello<script>evil()</script>', 'Hello<img src=x onerror=alert(1)>', 'Hello<style>body{display:none}</style>', 'Hello <a href="javascript:alert(1)">x</a>']) {
+    test(after, () => {
+      assert.throws(() => planOp(index, { type: 'setInner', aiId: p, tag: 'p', before: 'Hello', after }), (e) => e.status === 400 && e.code === 'bad_op');
+    });
+  }
+  test('constructs that were already there are fine', () => {
+    const s = anchorSource('<body><section class="slide"><p>Hi <a href="#x" onclick="go()">go</a></p></section></body>').source;
+    const idx = indexSource(s);
+    const id = [...idx.ids].find(([, t]) => t === 'p')[0];
+    planOp(idx, { type: 'setInner', aiId: id, tag: 'p', before: 'Hi <a href="#x" onclick="go()">go</a>', after: 'Hello <a href="#x" onclick="go()">go</a>' });
   });
 });
