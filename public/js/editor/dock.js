@@ -1,28 +1,68 @@
 import { h } from '../dom.js';
-import { doc, SLIDE_SEL } from './frame.js';
+import { doc, slides, cleanClone } from './frame.js';
 
-function deckHeadHTML() {
+function deckHead() {
   let out = '';
-  doc().querySelectorAll('head style, head link[rel="stylesheet"]').forEach((n) => (out += n.outerHTML));
+  for (const n of doc().querySelectorAll('head style:not(#dh-style), head link[rel="stylesheet"]')) out += n.outerHTML;
   return out;
 }
 
-export function buildDock(ctx) {
+function inertSlide(slide) {
+  const clone = cleanClone(slide);
+  for (const n of clone.querySelectorAll('script, iframe, object, embed')) n.remove();
+  for (const n of [clone, ...clone.querySelectorAll('*')]) {
+    for (const a of [...n.attributes]) {
+      if (a.name.startsWith('on') || /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+    }
+  }
+  return clone.outerHTML;
+}
+
+export function createDock(ctx) {
   const dock = ctx.dockEl;
-  dock.replaceChildren();
-  const slides = [...doc().querySelectorAll(SLIDE_SEL)];
-  if (slides.length < 2) { dock.hidden = true; return; }
-  const baseHref = location.origin + ctx.deck.url.replace(/[^/]*$/, '');
-  const head = deckHeadHTML();
-  slides.forEach((slide, i) => {
-    const frame = h('iframe', { class: 'dock-thumb', scrolling: 'no', tabindex: '-1', 'aria-hidden': 'true' });
-    frame.srcdoc = `<!DOCTYPE html><html><head><base href="${baseHref}">${head}<style>html,body{overflow:hidden!important;margin:0;scroll-snap-type:none}</style></head><body>${slide.outerHTML}</body></html>`;
-    const tile = h('div', {
-      class: 'dock-tile',
-      title: `Slide ${i + 1}`,
-      onclick: () => slide.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    }, frame, h('div', { class: 'tnum' }, String(i + 1)));
-    dock.appendChild(tile);
-  });
-  dock.hidden = false;
+  let observer = null;
+  let tiles = [];
+
+  function build() {
+    observer?.disconnect();
+    dock.replaceChildren();
+    tiles = [];
+    const list = slides();
+    if (list.length < 2) { dock.hidden = true; return; }
+    const baseHref = new URL(ctx.deck.url.replace(/[^/]*$/, ''), location.origin).href;
+    const head = deckHead();
+    const docFor = (slide) => `<!DOCTYPE html><html><head><base href="${baseHref}">${head}<style>html,body{overflow:hidden!important;margin:0;scroll-snap-type:none!important}</style></head><body>${inertSlide(slide)}</body></html>`;
+    observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || entry.target.querySelector('iframe')) continue;
+        const frame = h('iframe', { class: 'dock-thumb', sandbox: 'allow-scripts', scrolling: 'no', tabindex: '-1', 'aria-hidden': 'true' });
+        frame.srcdoc = docFor(list[Number(entry.target.dataset.index)]);
+        entry.target.prepend(frame);
+      }
+    }, { root: dock, rootMargin: '0px 200px' });
+    list.forEach((slide, i) => {
+      const tile = h('button', {
+        type: 'button',
+        class: 'dock-tile',
+        'aria-label': `Go to slide ${i + 1}`,
+        dataset: { index: String(i) },
+        onclick: () => slide.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      }, h('span', { class: 'dock-num' }, String(i + 1)));
+      tiles.push(tile);
+      dock.appendChild(tile);
+      observer.observe(tile);
+    });
+    dock.hidden = false;
+  }
+
+  function setActive(index) {
+    tiles.forEach((t, i) => {
+      const on = i === index - 1;
+      t.classList.toggle('active', on);
+      if (on) t.setAttribute('aria-current', 'true');
+      else t.removeAttribute('aria-current');
+    });
+  }
+
+  return { build, setActive, clear: () => { observer?.disconnect(); dock.replaceChildren(); dock.hidden = true; } };
 }
