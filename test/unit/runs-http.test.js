@@ -112,3 +112,21 @@ describe('runs over HTTP and the socket', () => {
     await postJson(srv.port, '/api/agents/detect', {});
   });
 });
+
+describe('prompts and anchors', () => {
+  let srv;
+  before(async () => { srv = await startDeckhand({ deck: 'test/fixtures/decks/basic.html', agents: ['claude'] }); });
+  after(async () => { await srv?.dispose(); });
+
+  test('viewing never writes, but copying the prompt writes the anchors', async () => {
+    const original = fs.readFileSync(srv.deckPath, 'utf8');
+    const state = (await request(srv.port, { path: '/api/state' })).json;
+    for (const p of [state.deck.url, '/api/notes', '/api/runs/current', '/api/create/target?description=tea', '/api/prompt?kind=create&description=tea']) {
+      assert.equal((await request(srv.port, { path: p })).status, 200, p);
+    }
+    assert.equal(fs.readFileSync(srv.deckPath, 'utf8'), original, 'viewing does not write');
+    const prompt = await request(srv.port, { path: '/api/prompt?scope=all' });
+    assert.equal(prompt.status, 200);
+    assert.match(fs.readFileSync(srv.deckPath, 'utf8'), /<h1 data-ai-id="dh\d+">Basic deck<\/h1>/);
+  });
+});
