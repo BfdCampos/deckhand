@@ -15,7 +15,7 @@ export function buildDock(ctx) {
   const baseHref = location.origin + ctx.deck.url.replace(/[^/]*$/, '');
   const head = deckHeadHTML();
   slides.forEach((slide, i) => {
-    const frame = h('iframe', { class: 'dock-thumb', scrolling: 'no', tabindex: '-1', 'aria-hidden': 'true' });
+    const frame = h('iframe', { class: 'dock-thumb', sandbox: 'allow-same-origin', scrolling: 'no', tabindex: '-1', 'aria-hidden': 'true' });
     frame.srcdoc = `<!DOCTYPE html><html><head><base href="${baseHref}">${head}<style>html,body{overflow:hidden!important;margin:0;scroll-snap-type:none}</style></head><body>${slide.outerHTML}</body></html>`;
     const tile = h('div', {
       class: 'dock-tile',
