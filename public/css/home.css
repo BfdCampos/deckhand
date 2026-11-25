@@ -11,3 +11,5 @@
 .picker-row.html .icon { color: var(--accent); }
 .picker-manual { margin-top: 14px; }
 .home-error { margin-top: 10px; }
+.deep-link { display: flex; flex-direction: column; gap: var(--space-3); }
+.deep-link-path { padding: var(--space-3); color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-control); overflow-wrap: anywhere; }
