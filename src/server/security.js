@@ -68,7 +68,12 @@ function isUnder(root, p) {
 }
 
 export async function resolveUnder(root, relPath) {
-  const realRoot = await fsp.realpath(root);
+  let realRoot;
+  try {
+    realRoot = await fsp.realpath(root);
+  } catch {
+    throw notFound();
+  }
   const segments = relPath.split(/[/\\]/).filter(Boolean);
   if (segments.some((s) => s === '..' || s === '.' || s.includes('\0'))) throw forbidden('forbidden_path');
   const candidate = path.join(realRoot, ...segments);
@@ -123,11 +128,14 @@ export async function readJson(req, limit = JSON_LIMIT) {
   if (type !== 'application/json') throw new HttpError(415, 'bad_content_type', 'Send JSON.');
   const buf = await readBody(req, limit);
   if (!buf.length) return {};
+  let body;
   try {
-    return JSON.parse(buf.toString('utf8'));
+    body = JSON.parse(buf.toString('utf8'));
   } catch {
     throw new HttpError(400, 'bad_json', 'That request was not valid JSON.');
   }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'bad_json', 'Send a JSON object.');
+  return body;
 }
 
 const startsWith = (buf, bytes, at = 0) => bytes.every((b, i) => buf[at + i] === b);
