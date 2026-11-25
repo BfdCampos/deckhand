@@ -161,13 +161,9 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
     });
   }
 
-  function validate(p) {
-    return validateDeckPath(p, { home });
-  }
-
   function open(p) {
     return run(async () => {
-      const { real, buf, mode } = await validate(p);
+      const { real, buf, mode } = await validateDeckPath(p, { home });
       await stopWatching();
       const dir = path.dirname(real);
       const fileReadOnly = !(await writable(real)) || !(await writable(dir));

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { loadConfig, PORT_ATTEMPTS } from './src/server/config.js';
 import { createGuard } from './src/server/security.js';
 import { createHttp } from './src/server/http.js';
 import { createHub } from './src/server/hub.js';
 import { createStore } from './src/server/store.js';
-import { listDir } from './src/server/files.js';
+import { tildify } from './src/server/files.js';
+import { homeRoutes } from './src/server/home-routes.js';
 import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
@@ -50,14 +52,23 @@ function legacyFields(meta) {
 
 function stateSnapshot() {
   const meta = session.meta();
-  return { ...legacyFields(meta), deck: meta, agents: agents.payload(), run: runs.state(), decksDir: config.decksDir, serverId };
+  return {
+    ...legacyFields(meta),
+    deck: meta,
+    agents: agents.payload(),
+    run: runs.state(),
+    serverId,
+    decksDir: config.decksDir,
+    decksDirLabel: tildify(config.decksDir, config.home),
+    sampleDeck: path.join(config.rootDir, 'samples', 'sample-deck.html'),
+  };
 }
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home, { home: config.home }),
   'POST /api/open': ({ body }) => session.open(body.path),
   ...deckRoutes({ session, notes }),
+  ...homeRoutes({ store, config }),
   ...assets.routes,
   ...agents.routes({ isBusy: runs.isBusy }),
   ...runs.routes,
