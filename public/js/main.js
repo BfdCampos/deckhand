@@ -11,6 +11,10 @@ const home = createHome({
   openDeck: (p) => openDeck(p),
   onCreateStarted: (run) => showGeneration(run.id),
   onWatchRun: (id) => showGeneration(id),
+  onContinue: () => {
+    const deck = store.get().deck;
+    if (deck) showEditor(deck, { push: true });
+  },
 });
 const generation = createGeneration({
   openDeck: (p) => openDeck(p, { push: false }),
@@ -108,7 +112,7 @@ const ROUTES = {
     const run = params.get('run');
     return run ? showGeneration(run, { push: false }) : showHome();
   },
-  '/': (params, { current, boot }) => (boot && current ? showEditor(current, { push: false }) : showHome()),
+  '/': () => showHome(),
 };
 
 async function route({ boot = false } = {}) {
