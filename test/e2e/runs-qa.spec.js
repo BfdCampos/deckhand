@@ -108,6 +108,8 @@ test.describe('create runs', () => {
     await expect(page.locator('.toast')).toContainText('Prompt copied');
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     await page.getByRole('button', { name: 'Edit description' }).click();
+    const name = /`([^`]+\.html)`/.exec(clip)[1];
+    await expect(page.locator('.create-target-path')).toHaveText(new RegExp(`/${name.replace(/[.]/g, '\\.')}$`));
     const saves = (await page.locator('.create-target-path').textContent()).split('/').pop();
     expect(clip).toContain(saves);
     expect(fs.existsSync(path.join(decksDir(deckhand), saves))).toBe(false);
