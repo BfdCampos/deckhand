@@ -1,40 +1,18 @@
-import { test, expect } from '@playwright/test';
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { test as base, expect } from './fixtures.js';
 
-// Local static server for public/ until the shared deckhand fixture serves
-// /test-kit.html with DECKHAND_TEST=1.
-const PUBLIC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../public');
-const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
-let server;
-let base;
-
-test.beforeAll(async () => {
-  server = http.createServer((req, res) => {
-    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    const abs = path.join(PUBLIC, rel);
-    if (!abs.startsWith(PUBLIC + path.sep)) { res.writeHead(403); return res.end(); }
-    fs.readFile(abs, (err, data) => {
-      if (err) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'Content-Type': TYPES[path.extname(abs)] || 'application/octet-stream' });
-      res.end(data);
-    });
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  base = `http://127.0.0.1:${server.address().port}`;
-});
-
-test.afterAll(async () => {
-  await new Promise((r) => server.close(r));
+let kitBase;
+const test = base.extend({
+  kitServer: [async ({ deckhand }, use) => {
+    kitBase = deckhand.url;
+    await use(deckhand.url);
+  }, { auto: true }],
 });
 
 async function openKit(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(`${base}/test-kit.html`);
+  await page.goto(`${kitBase}/test-kit.html`);
   await page.waitForFunction(() => window.kitReady === true);
   return errors;
 }
