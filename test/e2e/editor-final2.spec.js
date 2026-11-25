@@ -99,7 +99,7 @@ test('the selection overlay is clipped to the stage', async ({ page, deckhand })
 });
 
 test.describe('sidebar after a run', () => {
-  test.use({ deckhandOptions: { deck: BASIC, agents: ['claude'] } });
+  test.use({ deckhandOptions: { deck: BASIC, agents: ['claude'], scenario: 'long-run' } });
 
   test('F-m4 notes keep their space, cards are never cut and the tweak line sits below them; the header is honest', async ({ page, deckhand }) => {
     await addNotes(deckhand, [...THREE, { text: 'A fourth thought', targetTag: 'h1', slide: 1 }]);
@@ -109,7 +109,7 @@ test.describe('sidebar after a run', () => {
     await dragBy(page, li, 40, 0);
     await expect(page.locator('.notes-tweaks')).toBeVisible();
     await page.locator('.note-item').first().getByRole('button', { name: 'Run' }).click();
-    await expect(card(page).locator('.activity-state')).toHaveText('Done');
+    await expect(card(page).locator('.activity-state')).toHaveText('Done', { timeout: 15_000 });
 
     const list = await page.locator('.notes-list').boundingBox();
     expect(list.height).toBeGreaterThan(220);

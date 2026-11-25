@@ -67,9 +67,11 @@ test.describe('manual edits', () => {
     const after = await img.boundingBox();
     expect(after.width).toBeGreaterThan(before.width + 40);
     expect(Math.abs(after.width / after.height - 2)).toBeLessThan(0.05);
-    await diskEventually(deckhand.deckPath, (s) => /<img[^>]*style="[^"]*width: \d+px; height: \d+px;[^"]*"/.test(s));
-    const m = /width: (\d+)px; height: (\d+)px/.exec(await readDisk(deckhand.deckPath));
-    expect(Math.abs(Number(m[1]) / Number(m[2]) - 2)).toBeLessThan(0.05);
+    await diskEventually(deckhand.deckPath, (s) => /<img[^>]*style="[^"]*height: \d+px;[^"]*"/.test(s));
+    const style = /<img[^>]*style="([^"]*)"/.exec(await readDisk(deckhand.deckPath))[1];
+    const w = Number(/(?:^|; )width: (\d+)px/.exec(style)[1]);
+    const ht = Number(/height: (\d+)px/.exec(style)[1]);
+    expect(Math.abs(w / ht - 2)).toBeLessThan(0.05);
   });
 
   test('AC-33 Delete removes the selection, but not while editing text', async ({ page, deckhand }) => {
@@ -108,12 +110,13 @@ test.describe('manual edits', () => {
 
     await addImage(page, { width: 200, height: 100 });
     await diskEventually(deckhand.deckPath, (s) => s.includes('<img'));
+    const withImage = await disk();
     const hb = await page.locator('.handle').nth(3).boundingBox();
     await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
     await page.mouse.down();
     await page.mouse.move(hb.x + 40, hb.y + 20, { steps: 4 });
     await page.mouse.up();
-    await diskEventually(deckhand.deckPath, (s) => /<img[^>]*width: \d+px/.test(s));
+    await diskEventually(deckhand.deckPath, (s) => /<img[^>]*height: \d+px/.test(s));
 
     await frame.locator('p', { hasText: 'The first slide.' }).click();
     await page.keyboard.press('Delete');
@@ -124,7 +127,7 @@ test.describe('manual edits', () => {
     await diskEventually(deckhand.deckPath, (s) => s.includes('The first slide.'));
     await expect(frame.locator('p', { hasText: 'The first slide.' })).toHaveCount(1);
     await undo();
-    await diskEventually(deckhand.deckPath, (s) => /<img/.test(s) && !/<img[^>]*width: \d+px/.test(s));
+    await diskEventually(deckhand.deckPath, (s) => s === withImage);
     await undo();
     await diskEventually(deckhand.deckPath, (s) => !s.includes('<img'));
     await undo();
