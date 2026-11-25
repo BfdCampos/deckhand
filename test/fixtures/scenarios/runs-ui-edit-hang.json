@@ -1,0 +1,10 @@
+{
+  "description": "Runs UI: edits the deck mid-run, then waits until stopped, so the live reload and running state can be checked.",
+  "steps": [
+    { "emit": "init" },
+    { "emit": "read" },
+    { "emit": "edit", "replace": ["(<h1\\b[^>]*>)", "$1Edited: "], "regex": true, "delay": 50 },
+    { "emit": "text", "text": "Working on the rest." },
+    { "hang": true }
+  ]
+}
