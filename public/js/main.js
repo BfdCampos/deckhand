@@ -126,7 +126,7 @@ onEvent((m) => {
     lastServerId = m.serverId;
     return;
   }
-  if (m.type !== 'deck' && m.type !== 'bound') return;
+  if (m.type !== 'deck') return;
   const deck = normaliseDeck(m.deck);
   const wasReconnect = reconnected;
   reconnected = false;

@@ -72,13 +72,9 @@ export function connectEvents({ onStatus } = {}) {
 }
 
 export function normaliseDeck(d) {
-  if (!d) return null;
-  if (d.bound === false) return null;
-  if (d.bound) return { path: d.deckPath, name: d.base, url: d.deckUrl, dir: d.deckPath.replace(/\/[^/]*$/, '') };
-  return d.path ? d : null;
+  return d && d.path ? d : null;
 }
 
 export function deckFromState(s) {
-  if (!s) return null;
-  return 'deck' in s ? normaliseDeck(s.deck) : normaliseDeck(s);
+  return s ? normaliseDeck(s.deck) : null;
 }
