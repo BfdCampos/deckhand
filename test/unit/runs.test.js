@@ -245,12 +245,15 @@ describe('edit runs', () => {
   });
 
   test('AC-48 the deck file changes while the agent is still running', async () => {
-    const t = await setup({ scenario: 'slow' });
-    await t.runs.start({ kind: 'edit', scope: 'all' });
+    const t = await setup();
+    t.setScenario(scenarioFile(t.root, [
+      { emit: 'init' }, { emit: 'read' }, { emit: 'edit', replace: ['(<h1\\b[^>]*>)', '$1Edited: '], regex: true }, { hang: true },
+    ]));
+    const run = await t.runs.start({ kind: 'edit', scope: 'all' });
     await waitFor(() => fs.readFileSync(t.deckPath, 'utf8').includes('Edited: Basic deck'), { timeout: 4000 });
     assert.equal(t.runs.current().status, 'running');
     assert.ok(t.events.some((e) => e.type === 'deck-changed' && e.source === 'agent'));
-    await finished(t.runs);
+    await t.runs.stop(run.id);
   });
 
   test('AC-51 Revert restores the deck, notes and work order byte for byte and removes new assets', async () => {
