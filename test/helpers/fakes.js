@@ -18,16 +18,27 @@ export function agentBinDir(agents = ['claude', 'codex']) {
   return path.join(FIXTURES, dir);
 }
 
-let nodeDir;
 export function nodeBinDir() {
-  if (nodeDir && fs.existsSync(nodeDir)) return nodeDir;
-  nodeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhand-node-'));
-  fs.symlinkSync(process.execPath, path.join(nodeDir, 'node'));
-  return nodeDir;
+  const dir = path.join(os.tmpdir(), `deckhand-test-node-${process.version}`);
+  const link = path.join(dir, 'node');
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.symlinkSync(process.execPath, link);
+  } catch (e) {
+    if (e.code !== 'EEXIST') throw e;
+  }
+  return dir;
 }
 
+const created = [];
 export function tempDir(prefix = 'deckhand-test-') {
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  created.push(dir);
+  return dir;
+}
+
+export function removeTempDirs() {
+  while (created.length) fs.rmSync(created.pop(), { recursive: true, force: true });
 }
 
 export function readStream(name) {

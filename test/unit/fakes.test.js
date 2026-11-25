@@ -1,10 +1,12 @@
-import { test, describe } from 'node:test';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  FIXTURES, STREAMS, agentBinDir, makeStaging, readAgentLog, readStream, runFake, spawnFake, tempDir,
+  FIXTURES, STREAMS, agentBinDir, makeStaging, readAgentLog, readStream, removeTempDirs, runFake, spawnFake, tempDir,
 } from '../helpers/fakes.js';
+
+after(removeTempDirs);
 
 const CLAUDE_ARGS = [
   '-p', '--output-format', 'stream-json', '--verbose',
@@ -302,7 +304,7 @@ describe('recorded streams', () => {
       assert.doesNotMatch(text, /commands_changed/, f);
       assert.doesNotMatch(text, /\/Users\/(?!sam\/)/, f);
       assert.doesNotMatch(text, /\.claude\/plugins|monzo|brunocampos/i, f);
-      assert.doesNotMatch(text, /—/, f);
+      assert.doesNotMatch(text, /\u2014/, f);
       readStream(f);
     }
   });
