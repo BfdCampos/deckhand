@@ -121,6 +121,9 @@ async function shutdown(code) {
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
+process.on('unhandledRejection', (e) => {
+  console.error('[deckhand] unhandled error:', e?.stack || e);
+});
 process.on('uncaughtException', (e) => {
   console.error('[deckhand] unexpected error:', e?.stack || e);
   shutdown(1);
