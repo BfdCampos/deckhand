@@ -119,6 +119,7 @@ describe('launch', () => {
       const res = await request(srv.port, { path: '/api/state' });
       assert.equal(res.status, 200);
       assert.equal(res.json.deck.path, deck);
+      assert.match(srv.stdout(), new RegExp(`^\\s*Deckhand is running at http://127\\.0\\.0\\.1:${srv.port}/edit\\?deck=${encodeURIComponent(deck).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'), 'the printed link opens the deck, not Home');
     } finally {
       await srv.stop();
     }

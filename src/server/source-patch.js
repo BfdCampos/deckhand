@@ -360,6 +360,8 @@ function startTagString(node) {
   return `<${node.tagName}${attrs.join('')}>`;
 }
 
+let groupSeq = 0;
+
 function textPieces(src, start, end, value, raw) {
   const out = [];
   let i = start;
@@ -371,8 +373,13 @@ function textPieces(src, start, end, value, raw) {
       if (m) {
         const d = decodeRef(m[0]);
         if (d !== m[0] && value.startsWith(d, k)) {
-          if (Array.from(d).length !== 1) return null;
-          out.push({ v: d, start: i, end: i + m[0].length });
+          const cps = Array.from(d);
+          if (cps.length === 1) {
+            out.push({ v: d, start: i, end: i + m[0].length });
+          } else {
+            const group = ++groupSeq;
+            cps.forEach((v, n) => out.push({ v, group, start: n === 0 ? i : null, end: n === cps.length - 1 ? i + m[0].length : null }));
+          }
           i += m[0].length;
           k += d.length;
           continue;
@@ -395,20 +402,32 @@ function textPieces(src, start, end, value, raw) {
   return i === end ? out : null;
 }
 
-function tokenize(html, tag, ns, withLoc) {
+function unalignedPieces(value, loc) {
+  const cps = Array.from(value);
+  const group = ++groupSeq;
+  return cps.map((v, n) => ({ v, group, start: n === 0 && loc ? loc.startOffset : null, end: n === cps.length - 1 && loc ? loc.endOffset : null }));
+}
+
+const PRESERVING = /white-space\s*:\s*(pre|pre-wrap|pre-line|break-spaces)\b/i;
+
+function keepsSpace(node) {
+  return PRE_TAGS.has(node.tagName) || PRESERVING.test(attrValue(node, 'style') || '');
+}
+
+function tokenize(html, tag, ns, withLoc, { strict = false } = {}) {
   const frag = parseFragment(contextElement(tag, ns), html, { sourceCodeLocationInfo: withLoc });
   const tokens = [];
   const at = (loc, key) => (withLoc && loc ? loc[key] ?? null : null);
-  const walk = (parent, strict, raw) => {
+  const walk = (parent, strictHere, raw) => {
     for (const node of parent.childNodes || []) {
       const loc = node.sourceCodeLocation;
       if (node.nodeName === '#text') {
         let pieces = withLoc && loc ? textPieces(html, loc.startOffset, loc.endOffset, node.value, raw) : null;
-        if (!pieces) pieces = Array.from(node.value).map((v) => ({ v, start: null, end: null }));
+        if (!pieces) pieces = withLoc ? unalignedPieces(node.value, loc) : Array.from(node.value).map((v) => ({ v, start: null, end: null }));
         for (const piece of pieces) {
           const last = tokens.at(-1);
-          if (!strict && !raw && WS_CHARS.has(piece.v)) {
-            if (last?.k === 'w') { last.v += piece.v; last.end = piece.end; continue; }
+          if (!strictHere && !raw && !piece.group && WS_CHARS.has(piece.v)) {
+            if (last?.k === 'w' && !last.group) { last.v += piece.v; last.end = piece.end; continue; }
             tokens.push({ k: 'w', ...piece });
           } else {
             tokens.push({ k: 't', raw, ...piece });
@@ -418,7 +437,7 @@ function tokenize(html, tag, ns, withLoc) {
         tokens.push({ k: 'c', v: `<!--${node.data}-->`, start: at(loc, 'startOffset'), end: at(loc, 'endOffset') });
       } else if (node.tagName) {
         tokens.push({ k: 's', v: startTagString(node), start: at(loc?.startTag, 'startOffset'), end: at(loc?.startTag, 'endOffset') });
-        walk(node.tagName === 'template' ? node.content : node, strict || PRE_TAGS.has(node.tagName), RAW_TEXT_TAGS.has(node.tagName));
+        walk(node.tagName === 'template' ? node.content : node, strictHere || keepsSpace(node), RAW_TEXT_TAGS.has(node.tagName));
         if (!VOID_TAGS.has(node.tagName)) {
           const endAt = withLoc && loc ? (loc.endTag ? loc.endTag.startOffset : loc.endOffset) : null;
           tokens.push({ k: 'e', v: `</${node.tagName}>`, start: endAt, end: withLoc && loc ? (loc.endTag ? loc.endTag.endOffset : loc.endOffset) : null });
@@ -426,42 +445,88 @@ function tokenize(html, tag, ns, withLoc) {
       }
     }
   };
-  walk(frag, PRE_TAGS.has(tag), RAW_TEXT_TAGS.has(tag));
+  walk(frag, strict || PRE_TAGS.has(tag), RAW_TEXT_TAGS.has(tag));
   return { tokens, frag, length: html.length };
 }
 
 const same = (a, b) => a.k === b.k && (a.k === 'w' || a.v === b.v);
 
 function sameIgnoringSpace(a, b) {
-  const x = a.filter((t) => t.k !== 'w');
-  const y = b.filter((t) => t.k !== 'w');
+  const x = a.filter((t) => t.k !== 'w' && t.k !== 'c');
+  const y = b.filter((t) => t.k !== 'w' && t.k !== 'c');
   return x.length === y.length && x.every((t, i) => t.k === y[i].k && t.v === y[i].v);
 }
 
+const textOf = (tokens) => tokens.filter((t) => t.k === 't').map((t) => t.v).join('');
+
 function emit(t) {
   if (t.k === 't') return t.raw ? t.v : escText(t.v);
-  if (t.k === 'w') return t.v === '\u00A0' ? ' ' : escText(t.v);
+  if (t.k === 'w') return t.v === ' ' ? ' ' : escText(t.v);
   return t.v;
 }
 
-function minimalSplice(src, dst) {
-  const s = src.tokens;
-  const a = dst.tokens;
+const INLINE_TAGS = new Set(['a', 'b', 'i', 'em', 'strong', 'span', 'code', 'u', 's', 'small', 'mark', 'sub', 'sup', 'abbr', 'q', 'cite']);
+const endTagName = (t) => /^<\/([a-z0-9-]+)>$/.exec(t.v)?.[1];
+
+function minimalSplice(src, dst, html) {
+  const all = src.tokens;
+  const sIdx = [];
+  all.forEach((t, i) => { if (t.k !== 'c') sIdx.push(i); });
+  const s = sIdx.map((i) => all[i]);
+  const a = dst.tokens.filter((t) => t.k !== 'c');
   let p = 0;
   while (p < s.length && p < a.length && same(s[p], a[p])) p++;
   let q = 0;
   while (q < s.length - p && q < a.length - p && same(s[s.length - 1 - q], a[a.length - 1 - q])) q++;
+  const groupStart = new Map();
+  const groupEnd = new Map();
+  s.forEach((t, i) => {
+    if (!t.group) return;
+    if (!groupStart.has(t.group)) groupStart.set(t.group, i);
+    groupEnd.set(t.group, i);
+  });
+  if (p < s.length && s[p].group) p = Math.min(p, groupStart.get(s[p].group));
+  const cut = s.length - q;
+  if (cut > 0 && cut < s.length && s[cut].group && s[cut].group === s[cut - 1].group) q = s.length - (groupEnd.get(s[cut].group) + 1);
+
   let sStart = p;
   let sEnd = s.length - q;
-  const aStart = p;
-  const aEnd = a.length - q;
-  if (sEnd > sStart && s[sEnd - 1].k === 'w' && !(aEnd > aStart && a[aEnd - 1].k === 'w')) sEnd--;
-  if (sEnd > sStart && s[sStart].k === 'w' && !(aEnd > aStart && a[aStart].k === 'w')) sStart++;
-  if (sStart === sEnd && aStart === aEnd) return [];
-  const start = sStart < s.length ? s[sStart].start : src.length;
-  const end = sEnd > sStart ? s[sEnd - 1].end : start;
+  let region = a.slice(p, a.length - q);
+
+  const last = s[sEnd - 1];
+  if (sEnd > sStart && last.k === 'e' && INLINE_TAGS.has(endTagName(last))) {
+    for (let j = region.length - 1; j >= 0; j--) {
+      const t = region[j];
+      if (t.k === 'e' && t.v === last.v) {
+        const tail = region.slice(j + 1);
+        if (tail.length && tail.every((x) => x.k === 't' || x.k === 'w')) {
+          region = [...region.slice(0, j), ...tail];
+          sEnd--;
+        }
+        break;
+      }
+      if (t.k !== 't' && t.k !== 'w') break;
+    }
+  }
+
+  if (sEnd > sStart && s[sEnd - 1].k === 'w' && !(region.length && region.at(-1).k === 'w')) sEnd--;
+  if (sEnd > sStart && s[sStart].k === 'w' && !(region.length && region[0].k === 'w')) sStart++;
+  if (sStart === sEnd && !region.length) return [];
+
+  const from = sStart < s.length ? sIdx[sStart] : all.length;
+  const to = sEnd > sStart ? sIdx[sEnd - 1] + 1 : from;
+  const start = from < all.length ? all[from].start : src.length;
+  const end = to > from ? all[to - 1].end : start;
   if (start === null || end === null) return null;
-  return [{ start, end, text: a.slice(aStart, aEnd).map(emit).join('') }];
+
+  const inside = all.slice(from, to);
+  const firstContent = inside.findIndex((t) => t.k !== 'c' && t.k !== 'w');
+  const comments = inside.map((t, i) => ({ t, i })).filter(({ t }) => t.k === 'c');
+  if (comments.some(({ t }) => t.start === null || t.end === null)) return null;
+  const keep = ({ t }) => html.slice(t.start, t.end);
+  const lead = comments.filter(({ i }) => firstContent === -1 || i < firstContent).map(keep).join('');
+  const trail = comments.filter(({ i }) => firstContent !== -1 && i > firstContent).map(keep).join('');
+  return [{ start, end, text: lead + region.map(emit).join('') + trail }];
 }
 
 function riskySignatures(frag) {
@@ -487,25 +552,29 @@ function planSetInner(index, op) {
   if (VOID_TAGS.has(info.tag)) throw badOp('That element has no content to edit.');
   if (typeof op.before !== 'string' || typeof op.after !== 'string') throw badOp('Missing before or after.');
   const sourceInner = index.source.slice(info.innerStart, info.innerEnd);
-  const src = tokenize(sourceInner, info.tag, info.ns, true);
-  const before = tokenize(op.before, info.tag, info.ns, false);
+  let strict = op.whitespace === 'pre';
+  for (let n = info.node; n && n.tagName && !strict; n = n.parentNode) strict = keepsSpace(n);
+  const src = tokenize(sourceInner, info.tag, info.ns, true, { strict });
+  const before = tokenize(op.before, info.tag, info.ns, false, { strict });
   if (!sameIgnoringSpace(src.tokens, before.tokens)) {
     throw new HttpError(409, 'script_owned', "This text is set by the deck's own script, so Deckhand can't save it.");
   }
-  const after = tokenize(op.after, info.tag, info.ns, false);
+  const after = tokenize(op.after, info.tag, info.ns, false, { strict });
   const had = riskySignatures(before.frag);
   for (const [sig, n] of riskySignatures(after.frag)) {
     if (n > (had.get(sig) || 0)) throw badOp('Scripts, styles and event handlers are not allowed in text edits.');
   }
-  const local = minimalSplice(src, after) ?? [{ start: 0, end: sourceInner.length, text: after.tokens.map(emit).join('') }];
+  const local = minimalSplice(src, after, sourceInner) ?? [{ start: 0, end: sourceInner.length, text: after.tokens.map(emit).join('') }];
+  const intended = tokenize(applySplices(sourceInner, local).source, info.tag, info.ns, false, { strict });
+  if (textOf(intended.tokens) !== textOf(after.tokens)) throw badOp('That change could not be saved exactly.');
   return {
     splices: local.map((sp) => ({ start: info.innerStart + sp.start, end: info.innerStart + sp.end, text: sp.text })),
-    result: { aiId: info.aiId },
+    result: { aiId: info.aiId, changed: local.length > 0 },
     verify(newIdx) {
       const t = newIdx.get(info.aiId);
       if (!t || t.tag !== info.tag) throw badOp('That change would break the deck structure.');
-      const now = tokenize(newIdx.source.slice(t.innerStart, t.innerEnd), t.tag, t.ns, false);
-      if (!sameIgnoringSpace(now.tokens, after.tokens)) throw badOp('That change would break the deck structure.');
+      const now = tokenize(newIdx.source.slice(t.innerStart, t.innerEnd), t.tag, t.ns, false, { strict });
+      if (!sameIgnoringSpace(now.tokens, intended.tokens)) throw badOp('That change would break the deck structure.');
       verifyStable(index, newIdx, { scope: info.aiId });
     },
   };
