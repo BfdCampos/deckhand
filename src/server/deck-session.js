@@ -256,19 +256,31 @@ export function createDeckSession({ hub, store = null, notes = null, home = os.h
         entries.push({ opId, tabId, applied: next.applied, tweak: plan.tweak || null });
       }
       if (!entries.length) return { rev: deck.rev, results };
-      await writeDisk(source);
+      const journalled = [];
+      const tweaked = [];
+      for (const e of entries) {
+        const entry = { opId: e.opId, tabId: e.tabId, mod: null, undoMod: null, undone: false, tweak: e.tweak, tweakBefore: null, tweakAfter: null };
+        if (e.tweak && notes) {
+          entry.tweakBefore = notes.tweaks()[e.tweak.aiId] ?? null;
+          entry.tweakAfter = mergeTweak(entry.tweakBefore, e.tweak);
+          tweaked.unshift(entry);
+          await updateTweak(e.tweak, entry.tweakAfter);
+        }
+        journalled.push({ entry, applied: e.applied });
+      }
+      try {
+        await writeDisk(source);
+      } catch (err) {
+        for (const entry of tweaked) await updateTweak(entry.tweak, entry.tweakBefore);
+        throw err;
+      }
       deck.source = source;
       deck.index = index;
       deck.anchorsFlushed = true;
       deck.rev++;
-      for (const e of entries) {
-        mods.push({ splices: e.applied, inverseOf: null });
-        const entry = { opId: e.opId, tabId: e.tabId, mod: mods.length - 1, undoMod: null, undone: false, tweak: e.tweak, tweakBefore: null, tweakAfter: null };
-        if (e.tweak && notes) {
-          entry.tweakBefore = notes.tweaks()[e.tweak.aiId] ?? null;
-          entry.tweakAfter = mergeTweak(entry.tweakBefore, e.tweak);
-          await updateTweak(e.tweak, entry.tweakAfter);
-        }
+      for (const { entry, applied } of journalled) {
+        mods.push({ splices: applied, inverseOf: null });
+        entry.mod = mods.length - 1;
         pushJournal(entry);
       }
       broadcast({ type: 'deck-changed', deckId: deck.deckId, rev: deck.rev, source: 'tab', byTab: tabId });
