@@ -8,6 +8,7 @@ import { createHub } from './src/server/hub.js';
 import { createStore } from './src/server/store.js';
 import { tildify } from './src/server/files.js';
 import { homeRoutes } from './src/server/home-routes.js';
+import { openBrowser } from './src/server/open.js';
 import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
@@ -120,6 +121,9 @@ async function shutdown(code) {
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
+process.on('unhandledRejection', (e) => {
+  console.error('[deckhand] unhandled error:', e?.stack || e);
+});
 process.on('uncaughtException', (e) => {
   console.error('[deckhand] unexpected error:', e?.stack || e);
   shutdown(1);
@@ -144,4 +148,10 @@ if (config.deckPath) {
 }
 
 await detecting;
-console.log(`\n  Deckhand is running at http://127.0.0.1:${port}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
+const url = `http://127.0.0.1:${port}`;
+console.log(`\n  Deckhand is running at ${url}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
+
+if (config.open) {
+  const deck = session.meta();
+  openBrowser(deck ? `${url}/edit?deck=${encodeURIComponent(deck.path)}` : `${url}/`);
+}

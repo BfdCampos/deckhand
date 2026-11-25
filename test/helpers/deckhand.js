@@ -19,7 +19,7 @@ function pointAt(link, dir) {
 }
 
 export async function startDeckhand({
-  deck, copyDeck = true, agents = ['claude', 'codex'], binDir, env = {}, args = [], portArgs = ['--port', '0'], scenario,
+  deck, copyDeck = true, agents = ['claude', 'codex'], binDir, env = {}, args = [], portArgs = ['--port', '0'], scenario, noOpen = true,
 } = {}) {
   const root = tempDir('deckhand-e2e-');
   const tmp = path.join(root, 'tmp');
@@ -90,7 +90,7 @@ export async function startDeckhand({
   }
 
   async function start(ports) {
-    const started = await launch([...ports, '--no-open', ...args, ...(deckPath ? [deckPath] : [])]);
+    const started = await launch([...ports, ...(noOpen ? ['--no-open'] : []), ...args, ...(deckPath ? [deckPath] : [])]);
     child = started.proc;
     dh.url = started.url;
     dh.port = started.port;
