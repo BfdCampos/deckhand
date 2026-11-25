@@ -167,7 +167,7 @@ export function createEditor({ onHome }) {
   const switchButton = h('button', { type: 'button', class: 'btn btn-primary' }, 'Switch to it');
   const elsewhereHome = h('button', { type: 'button', class: 'btn btn-secondary' }, icon('home'), 'Go Home');
   const elsewhere = h('div', { class: 'editor-elsewhere', role: 'alertdialog', 'aria-labelledby': 'editor-elsewhere-text', hidden: true },
-    h('div', { class: 'editor-elsewhere-card' },
+    h('div', { class: 'editor-elsewhere-card', tabindex: '-1' },
       h('span', { class: 'editor-elsewhere-icon' }, icon('alert')),
       elsewhereText,
       h('p', { class: 't-small text-muted' }, 'Edits here are paused so nothing is saved into the wrong file.'),
@@ -190,7 +190,7 @@ export function createEditor({ onHome }) {
     elsewhereHome.onclick = onHome;
     setPaused(true);
     syncControls();
-    switchButton.focus();
+    elsewhere.querySelector('.editor-elsewhere-card').focus();
   }
 
   async function reopen() {
@@ -203,12 +203,12 @@ export function createEditor({ onHome }) {
   }
 
   function setLocked(locked, message) {
-    ctx.locked = !!locked;
-    if (ctx.locked) {
+    if (locked) {
       ctx.manual.endEditing();
       ctx.selected = null;
       ctx.notesApi.closePopovers();
     }
+    ctx.locked = !!locked;
     pillText.textContent = message || 'Your agent is editing your deck…';
     veil.hidden = !ctx.locked;
     syncControls();
@@ -346,7 +346,7 @@ export function createEditor({ onHome }) {
     bindFrame(next);
   }
 
-  function open(deck, { slide } = {}) {
+  function open(deck, { slide, paused } = {}) {
     ctx.manual.endEditing();
     if (ctx.deck) freshFrame();
     ctx.deck = deck;
@@ -367,6 +367,10 @@ export function createEditor({ onHome }) {
     syncControls();
     root.hidden = false;
     setToastHost(stage);
+    if (paused) {
+      showElsewhere(paused.deck, paused);
+      return;
+    }
     ctx.notesApi.load();
     loadFrame(slide ? { slide: Number(slide), frac: 0 } : null);
   }
