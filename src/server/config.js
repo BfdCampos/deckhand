@@ -42,7 +42,7 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env) {
     else if (arg.startsWith('--port=')) config.port = parsePort(arg.slice('--port='.length));
     else if (arg === '--no-open') config.open = false;
     else if (arg.startsWith('-')) config.warnings.push(`Ignoring unknown option ${arg}`);
-    else if (!config.deckPath) config.deckPath = path.resolve(arg);
+    else if (!config.deckPath) config.deckPath = path.resolve(env.INIT_CWD || process.cwd(), arg);
   }
 
   if (env.CI || config.test) config.open = false;
