@@ -3,37 +3,46 @@ import { api, onEvent } from '../api.js';
 import { icon } from '../ui/icons.js';
 import { toast } from '../ui/toast.js';
 import { openModal } from '../ui/modal.js';
+import { openMenu } from '../ui/popover.js';
 
-const HANDOFF_LABEL = 'Hand off to AI →';
+const HANDOFF_LABEL = 'Hand off to AI';
 const keyOf = (id) => (id == null ? '' : id);
 
 export function mountRuns(ctx) {
   const runState = {};
 
-  const status = h('span', { class: 'count' });
+  const status = h('span', { class: 'act-status t-meta' });
   const log = h('div', { class: 'activity-log' });
   const activity = ctx.slots.activity;
   activity.hidden = true;
-  activity.append(h('div', { class: 'sb-title' }, 'Activity ', status), log);
+  activity.append(h('div', { class: 'sb-title' }, h('span', { class: 't-label' }, 'Activity'), status), log);
 
-  const implement = h('button', { type: 'button', class: 'implement', onclick: handoff }, HANDOFF_LABEL);
-  const menu = h('div', { class: 'menu', hidden: true },
-    h('button', { type: 'button', onclick: copyPrompt }, 'Copy prompt'),
-    h('button', { type: 'button', onclick: () => { toggleMenu(true); showPrompt(); } }, 'Show prompt'),
-  );
+  const implementLabel = h('span', null, HANDOFF_LABEL);
+  const implement = h('button', { type: 'button', class: 'btn btn-primary btn-lg implement', onclick: handoff }, icon('sparkle'), implementLabel);
   const caret = h('button', {
     type: 'button',
-    class: 'implement-caret',
+    class: 'btn btn-primary btn-lg btn-icon implement-caret',
     title: 'More options',
     'aria-label': 'More options',
-    onclick: (e) => { e.stopPropagation(); toggleMenu(); },
+    'aria-haspopup': 'menu',
+    onclick: toggleMenu,
   }, icon('caret'));
-  ctx.slots.footer.append(h('div', { class: 'split' }, implement, caret, menu));
-  document.addEventListener('click', () => toggleMenu(true));
+  let menu = null;
 
-  function toggleMenu(forceHidden) {
-    menu.hidden = forceHidden === undefined ? !menu.hidden : forceHidden;
+  function toggleMenu() {
+    if (menu) { menu.close(); return; }
+    menu = openMenu({
+      anchor: caret,
+      align: 'end',
+      label: 'Hand-off options',
+      onClose: () => { menu = null; },
+      items: [
+        { label: 'Copy prompt', icon: 'copy', onSelect: copyPrompt },
+        { label: 'Show prompt', icon: 'eye', onSelect: showPrompt },
+      ],
+    });
   }
+  ctx.slots.footer.append(h('div', { class: 'btn-group split' }, implement, caret));
 
   async function fetchPrompt() {
     ctx.notesApi.persist();
@@ -41,7 +50,6 @@ export function mountRuns(ctx) {
   }
 
   async function copyPrompt() {
-    toggleMenu(true);
     try {
       await navigator.clipboard.writeText(await fetchPrompt());
       toast('Prompt copied');
@@ -54,15 +62,16 @@ export function mountRuns(ctx) {
     let prompt;
     try { prompt = await fetchPrompt(); } catch (err) { toast(err.message, { tone: 'error' }); return; }
     const body = h('div', null,
-      h('p', null, "This runs automatically on hand-off. Paste it into Claude Code yourself if you'd rather. It points your agent at the work order and the deck file, which it reads for the real structure and styles."),
+      h('p', { class: 't-small text-muted prompt-intro' }, "This runs automatically on hand-off. Paste it into Claude Code yourself if you'd rather. It points your agent at the work order and the deck file, which it reads for the real structure and styles."),
       h('pre', { class: 'impl-prompt' }, prompt),
     );
-    const modal = openModal({
+    openModal({
       title: 'The prompt we hand your AI',
       body,
+      width: 640,
       actions: [
-        { label: 'Copy prompt', primary: true, onClick: () => navigator.clipboard.writeText(prompt).then(() => toast('Prompt copied')) },
-        { label: 'Close', onClick: () => modal.close() },
+        { label: 'Close', onClick: ({ close }) => close() },
+        { label: 'Copy prompt', primary: true, icon: 'copy', onClick: () => navigator.clipboard.writeText(prompt).then(() => toast('Prompt copied', { tone: 'success' })) },
       ],
     });
   }
@@ -80,8 +89,8 @@ export function mountRuns(ctx) {
   }
 
   function setStatus(s) {
-    status.textContent = s === 'working' ? 'working… keep this open' : s === 'done' ? 'done' : s === 'error' ? 'error' : '';
-    status.className = 'count st-' + (s || 'idle');
+    status.textContent = s === 'working' ? 'Working… keep this open' : s === 'done' ? 'Done' : s === 'error' ? "Didn't finish" : '';
+    status.className = 'act-status t-meta ' + ({ working: 'text-ink-2', done: 'text-success', error: 'text-error' }[s] || '');
   }
 
   function addLine(m) {
@@ -93,7 +102,7 @@ export function mountRuns(ctx) {
 
   function onStarted(m) {
     runState[keyOf(m.noteId)] = 'running';
-    if (m.noteId == null) { implement.disabled = true; implement.textContent = 'Working…'; }
+    if (m.noteId == null) { implement.disabled = true; implementLabel.textContent = 'Working…'; }
     ctx.notesApi.render();
     activity.hidden = false;
     log.replaceChildren();
@@ -103,7 +112,7 @@ export function mountRuns(ctx) {
 
   function onDone(m) {
     delete runState[keyOf(m.noteId)];
-    if (m.noteId == null) { implement.disabled = false; implement.textContent = HANDOFF_LABEL; }
+    if (m.noteId == null) { implement.disabled = false; implementLabel.textContent = HANDOFF_LABEL; }
     setStatus(m.ok ? 'done' : 'error');
     if (m.ok) {
       ctx.notes = m.noteId == null ? [] : ctx.notes.filter((x) => x.id !== m.noteId);
