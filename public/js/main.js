@@ -118,21 +118,27 @@ async function route({ boot = false } = {}) {
 
 let lastServerId = null;
 let reconnected = false;
+let restarted = false;
 
 onEvent((m) => {
   if (m.type === 'error') { home.showError(m.error); return; }
   if (m.type === 'hello') {
     reconnected = lastServerId !== null;
+    restarted = reconnected && m.serverId !== lastServerId;
     lastServerId = m.serverId;
     return;
   }
   if (m.type !== 'deck') return;
   const deck = normaliseDeck(m.deck);
   const wasReconnect = reconnected;
+  const wasRestart = restarted;
   reconnected = false;
+  restarted = false;
   if (!deck) {
     store.set({ deck: null });
-    if (editor.visible) editor.showClosed();
+    if (!editor.visible) return;
+    if (wasRestart && !editor.paused) editor.reopen();
+    else editor.showClosed();
     return;
   }
   store.set({ deck });
@@ -140,7 +146,8 @@ onEvent((m) => {
   const shown = editor.deck;
   if (!shown || shown.path === deck.path) {
     if (!shown || shown.deckId !== deck.deckId) showEditor(deck, { push: false, slide: urlSlide() });
-    else if (wasReconnect) editor.ctx.reload('tab');
+    else if (wasReconnect) editor.reconnected();
+    else editor.updateMeta(deck);
     return;
   }
   if (deck.path === pendingOpen) return;
