@@ -45,15 +45,9 @@ const app = createHttp({
   deckSource: (file) => (file === session.meta()?.path ? session.servedSource() : null),
 });
 
-function legacyFields(meta) {
-  if (!meta) return { bound: false };
-  return { bound: true, deckPath: meta.path, base: meta.name, deckUrl: meta.url, notesJson: meta.notesPath, notesMd: meta.workOrderPath };
-}
-
 function stateSnapshot() {
   const meta = session.meta();
   return {
-    ...legacyFields(meta),
     deck: meta,
     agents: agents.payload(),
     run: runs.state(),
@@ -66,7 +60,6 @@ function stateSnapshot() {
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  'POST /api/open': ({ body }) => session.open(body.path),
   ...deckRoutes({ session, notes }),
   ...homeRoutes({ store, config }),
   ...assets.routes,
