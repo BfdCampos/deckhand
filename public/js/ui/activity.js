@@ -89,6 +89,15 @@ export function createActivityCard() {
       h(kind === 'text' ? 'div' : 'span', { class: 'activity-text' }, kind === 'text' || kind === 'result' ? renderMarkdown(text) : text));
   }
 
+  function setLive(rowEl, live) {
+    if (!rowEl) return;
+    rowEl.classList.toggle('is-live', live);
+    const kind = rowEl.lineData?.kind;
+    const dots = rowEl.querySelector('.activity-ellipsis');
+    if (live && (kind === 'write' || kind === 'edit') && !dots) rowEl.querySelector('.activity-text')?.append(h('span', { class: 'activity-ellipsis' }, '…'));
+    else if (!live) dots?.remove();
+  }
+
   function add(line, animate) {
     if (typeof line.seq === 'number') {
       if (line.seq <= lastSeq) return;
@@ -98,14 +107,14 @@ export function createActivityCard() {
     const key = kind === 'status' ? `status:${line.text}` : null;
     if (key && key === lastKey) return;
     const stick = nearBottom();
-    lastRow?.classList.remove('is-live');
+    setLive(lastRow, false);
     lastRow = row(line, animate);
     lastKey = key;
     if (repeatsError(line)) lastRow.hidden = true;
     lastRow.lineData = line;
     list.append(lastRow);
     syncEmpty();
-    if (tone === 'working') lastRow.classList.add('is-live');
+    if (tone === 'working') setLive(lastRow, true);
     if (stick) list.scrollTop = list.scrollHeight;
   }
 
@@ -122,7 +131,7 @@ export function createActivityCard() {
       state.textContent = stateText ?? TONE_STATE[nextTone] ?? '';
       el.className = `activity-card tone-${nextTone}`;
       progress.hidden = nextTone !== 'working' && nextTone !== 'stopping';
-      if (lastRow) lastRow.classList.toggle('is-live', nextTone === 'working');
+      setLive(lastRow, nextTone === 'working');
     },
     setLines(lines = []) {
       list.replaceChildren();

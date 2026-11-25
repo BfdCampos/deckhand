@@ -36,6 +36,7 @@ export function createGeneration({ openDeck, goHome, showRun }) {
     h('span', { class: 'chip chip-quiet gen-clock' }, icon('clock', { size: 14 }), timer),
     h('span', { class: 'chip chip-quiet gen-file' }, icon('deck', { size: 14 }), targetText));
 
+  const wait = h('p', { class: 'gen-wait t-small', role: 'status', hidden: true });
   const errorBox = h('pre', { class: 'gen-error', hidden: true });
   const failure = h('div', { class: 'gen-failure', hidden: true }, errorBox);
   const actions = h('div', { class: 'gen-actions' });
@@ -51,7 +52,8 @@ export function createGeneration({ openDeck, goHome, showRun }) {
         eyebrow,
         title,
         h('div', { class: 'gen-quote-wrap' }, quote, more),
-        meta),
+        meta,
+        wait),
       failure,
       card.el,
       h('footer', { class: 'gen-foot' }, actions, hint)));
@@ -79,12 +81,22 @@ export function createGeneration({ openDeck, goHome, showRun }) {
     return m ? m[1] : null;
   }
 
+  function waitingCopy(seconds) {
+    if (seconds < 10) return 'Your agent is reading the brief and planning the slides.';
+    if (seconds < 60) return 'Writing your deck. Bigger decks take a minute or two.';
+    if (seconds < 600) return 'Still writing. Detailed decks can take a few minutes.';
+    return 'Still going. You can stop it any time.';
+  }
+
   function startTick() {
     clearInterval(tick);
     const render = () => {
-      if (!run?.startedAt) { timer.textContent = '0:00'; return; }
+      if (!run?.startedAt) { timer.textContent = '0:00'; wait.hidden = true; return; }
       const end = run.endedAt ? Date.parse(run.endedAt) : Date.now();
-      timer.textContent = formatElapsed(end - Date.parse(run.startedAt));
+      const elapsed = end - Date.parse(run.startedAt);
+      timer.textContent = formatElapsed(elapsed);
+      wait.hidden = run.status !== 'running';
+      if (!wait.hidden) wait.textContent = waitingCopy(Math.floor(elapsed / 1000));
     };
     render();
     if (run && run.status === 'running') tick = setInterval(render, 1000);
@@ -164,6 +176,7 @@ export function createGeneration({ openDeck, goHome, showRun }) {
     if (finishing || !run) return;
     finishing = true;
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* private mode */ }
+    store.set({ justCreated: run.id });
     try {
       await openDeck(run.targetPath);
       toast(CREATED, { tone: 'success' });
