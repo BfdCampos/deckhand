@@ -349,6 +349,8 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     if (body.kind !== 'edit' && body.kind !== 'create') throw new HttpError(400, 'bad_run', 'Unknown kind of run.');
     const agent = agents.selected();
     if (!agent) throw new HttpError(400, 'no_agent', 'Install Claude Code or Codex first.');
+    const tooOld = agent.adapter.blocker(agent.flags);
+    if (tooOld) throw new HttpError(400, 'agent_too_old', tooOld);
     const run = {
       state: {
         id: `run_${crypto.randomBytes(6).toString('hex')}`,

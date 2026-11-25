@@ -14,7 +14,13 @@ export function createAgents({ config, store, broadcast = () => {}, env = proces
     const results = await Promise.all(ADAPTERS.map((a) => detectOne(a, { dirs, env, timeoutMs })));
     found = Object.fromEntries(results.filter((r) => r.found).map((r) => [r.id, r]));
     for (const r of results) {
-      const missing = r.found ? byId[r.id].missingFlags(r.flags) : [];
+      if (!r.found) continue;
+      const blocked = byId[r.id].blocker(r.flags);
+      if (blocked) {
+        log(`[deckhand] ${blocked}`);
+        continue;
+      }
+      const missing = byId[r.id].missingFlags(r.flags);
       if (missing.length) log(`[deckhand] ${byId[r.id].name} doesn't list ${missing.join(', ')}; running without ${missing.length > 1 ? 'them' : 'it'}.`);
     }
     const p = payload();

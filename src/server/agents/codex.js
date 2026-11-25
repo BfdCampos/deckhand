@@ -141,6 +141,13 @@ export default {
     return { args, stdin: `${guardrail}\n\n${prompt}` };
   },
 
+  blocker(flags) {
+    if (flags && (!flags.has('--sandbox') || !flags.has('--cd') || (!flags.has('--json') && !flags.has('--experimental-json')))) {
+      return 'This version of Codex is too old for Deckhand. Update it, then click Check again.';
+    }
+    return null;
+  },
+
   missingFlags(flags) {
     if (!flags) return [];
     const missing = ['--sandbox', '--cd', '--skip-git-repo-check', '--ephemeral', '--config'].filter((f) => !flags.has(f));

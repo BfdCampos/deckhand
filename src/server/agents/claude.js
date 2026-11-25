@@ -5,8 +5,9 @@ import { capture, flagsIn } from './detect.js';
 const TOOLS = 'Read,Edit,Write,Glob,Grep';
 const OPTIONAL = [
   '--tools', '--restricted', '--strict-mcp-config', '--permission-mode', '--permission-prompts',
-  '--no-session-persistence', '--disable-slash-commands', '--append-system-prompt',
+  '--no-session-persistence', '--disable-slash-commands', '--append-system-prompt', '--disallowed-tools',
 ];
+const DISALLOWED = 'Bash,WebFetch,WebSearch';
 const FILE_TOOLS = { Read: ['read', 'Reading'], Edit: ['edit', 'Editing'], Write: ['write', 'Writing'] };
 const THINKING = 'Thinking…';
 
@@ -118,8 +119,9 @@ export default {
   invocation({ prompt, guardrail, flags }) {
     const has = (f) => !flags || flags.has(f);
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    if (has('--tools')) args.push('--tools', TOOLS);
+    args.push('--tools', TOOLS);
     if (has('--restricted')) args.push('--restricted');
+    else if (has('--disallowed-tools')) args.push('--disallowed-tools', DISALLOWED);
     if (has('--strict-mcp-config')) args.push('--strict-mcp-config');
     if (has('--permission-mode')) args.push('--permission-mode', 'acceptEdits');
     if (has('--permission-prompts')) args.push('--permission-prompts', 'none');
@@ -132,8 +134,15 @@ export default {
     return { args, stdin: `${guardrail}\n\n${prompt}` };
   },
 
+  blocker(flags) {
+    if (flags && !flags.has('--tools')) {
+      return 'This version of Claude Code is too old for Deckhand. Update it with `claude update`, then click Check again.';
+    }
+    return null;
+  },
+
   missingFlags(flags) {
-    return flags ? OPTIONAL.filter((f) => !flags.has(f)) : [];
+    return flags ? OPTIONAL.filter((f) => !flags.has(f) && f !== '--disallowed-tools' && f !== '--tools') : [];
   },
 
   createParser,
