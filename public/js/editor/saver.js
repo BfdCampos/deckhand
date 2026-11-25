@@ -9,6 +9,16 @@ export const SCRIPT_OWNED = "This text is set by the deck's own script, so Deckh
 const CHANGED_ON_DISK = 'This text changed on disk while you were editing it, so your version wasn\'t saved.';
 const UNREACHABLE = "Couldn't reach Deckhand. Your changes are kept here and will save when it's back.";
 
+const PRESERVED = new Set(['pre', 'pre-wrap', 'pre-line', 'break-spaces']);
+
+function textOp(target, item) {
+  if (!aiIdOf(target) || !target.isConnected) return null;
+  const op = { type: 'setInner', aiId: aiIdOf(target), tag: target.tagName.toLowerCase(), before: item.text.before, after: item.text.after };
+  const view = target.ownerDocument.defaultView;
+  if (view && PRESERVED.has(view.getComputedStyle(target).whiteSpace)) op.whitespace = 'pre';
+  return op;
+}
+
 const transient = (err) => !(err instanceof ApiError) || err.status >= 500 || err.code === 'write_failed' || err.code === 'internal';
 
 export function createSaver(ctx) {
@@ -100,6 +110,11 @@ export function createSaver(ctx) {
         item.entry.opId = result.opId || item.opId;
         item.entry.settled = true;
       }
+      if (text && result.changed === false && item.text.after !== item.text.before) {
+        item.rollback?.();
+        dropEntry(item);
+        toast('That change was only spacing the slide collapses, so there was nothing to save.');
+      }
       item.onResult?.(result);
       return 'done';
     } catch (err) {
@@ -136,7 +151,7 @@ export function createSaver(ctx) {
       const message = err.code === 'deck_changed' ? CHANGED_ON_DISK : err.message;
       dirty.set(item.el, { base: item.text.before, baseRev: item.baseRev, message, conflict });
       render();
-      if (conflict) toast(message, { tone: 'error', action: { label: 'Show theirs', onClick: () => { dirty.delete(item.el); render(); ctx.reload('external'); } } });
+      if (conflict) conflictsChanged();
       return 'done';
     }
     switch (err.code) {
@@ -202,9 +217,7 @@ export function createSaver(ctx) {
       rollback,
       entry,
     };
-    item.build = () => (aiIdOf(target)
-      ? { type: 'setInner', aiId: aiIdOf(target), tag: target.tagName.toLowerCase(), before: item.text.before, after: item.text.after }
-      : null);
+    item.build = () => textOp(target, item);
     enqueue(item);
   }
 
@@ -247,20 +260,54 @@ export function createSaver(ctx) {
     enqueue({ kind: 'replay', direction, entry, early, forward, back });
   }
 
+  const conflictCount = () => [...dirty.values()].filter((d) => d.conflict).length;
+
+  function conflictsChanged() {
+    ctx.onConflicts?.(conflictCount());
+  }
+
+  function queueText(target, before, baseRev) {
+    const opId = crypto.randomUUID();
+    const item = { kind: 'text', el: target, opId, text: { before, after: ctx.innerOf(target) }, baseRev };
+    item.build = () => textOp(target, item);
+    queue.push(item);
+  }
+
+  async function keepMine() {
+    const clashes = [...dirty].filter(([, d]) => d.conflict);
+    for (const [target] of clashes) {
+      let server = null;
+      try { server = await ctx.serverInnerOf(target); } catch { /* handled below */ }
+      if (!server) {
+        dirty.set(target, { ...dirty.get(target), message: "Deckhand couldn't read the version on disk. Try again." });
+        continue;
+      }
+      dirty.delete(target);
+      queueText(target, server.inner, server.rev);
+    }
+    conflictsChanged();
+    render();
+    pump();
+  }
+
+  function useTheirs() {
+    for (const [target, d] of [...dirty]) if (d.conflict) dirty.delete(target);
+    conflictsChanged();
+    render();
+    ctx.reload('tab');
+    settle();
+  }
+
   function retry() {
     halted = null;
     for (const [target, stale] of [...dirty]) {
       if (stale.conflict) continue;
       dirty.delete(target);
-      const opId = crypto.randomUUID();
-      const item = { kind: 'text', el: target, opId, text: { before: stale.base, after: ctx.innerOf(target) }, baseRev: stale.baseRev ?? ctx.rev };
-      item.build = () => (aiIdOf(target) && target.isConnected
-        ? { type: 'setInner', aiId: aiIdOf(target), tag: target.tagName.toLowerCase(), before: item.text.before, after: item.text.after }
-        : null);
-      queue.push(item);
+      queueText(target, stale.base, stale.baseRev ?? ctx.rev);
     }
     render();
-    pump();
+    if (conflictCount()) keepMine();
+    else pump();
   }
 
   function flush() {
@@ -276,12 +323,15 @@ export function createSaver(ctx) {
     redo: () => replay('redo'),
     flush,
     retry,
+    keepMine,
+    useTheirs,
     hasUnsaved,
     clearHistory: () => history.clear(),
     reset() {
       queue.length = 0;
       dirty.clear();
       halted = null;
+      conflictsChanged();
       render();
     },
     get busy() { return running || queue.length > 0; },

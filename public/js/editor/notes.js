@@ -280,7 +280,8 @@ export function mountNotes(ctx) {
   function render() {
     syncInlineWarning();
     const ghost = inline && !ctx.notes.some((n) => n.id === inline.id) ? inline.note : null;
-    count.textContent = ctx.notes.filter(isOpen).length;
+    const openCount = ctx.notes.filter(isOpen).length;
+    count.textContent = openCount < ctx.notes.length ? `${openCount} open` : String(openCount);
     if (!ctx.notes.length && !ghost) {
       list.replaceChildren(h('div', { class: 'notes-empty-state' },
         h('span', { class: 'notes-empty-icon' }, icon('note')),

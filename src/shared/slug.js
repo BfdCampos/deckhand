@@ -1,5 +1,7 @@
 const LEADING = new Set(['a', 'an', 'the', 'make', 'create', 'me', 'please', 'build', 'write']);
 const FILLER = new Set(['a', 'an', 'the', 'me', 'for', 'our', 'my', 'your', 'of', 'to', 'and', 'or', 'with', 'in', 'on', 'about', 'some']);
+const CLAUSE = new Set(['we', 'they', 'i', 'you', 'he', 'she', 'it', 'us', 'them', 'what', 'which', 'that', 'who', 'whom', 'whose', 'so', 'because', 'why', 'how', 'when', 'where', 'while', 'if', 'then', 'can', 'will', 'should', 'would', 'could', 'must', 'is', 'are', 'was', 'were', 'be', 'been']);
+const TRAILING = new Set([...CLAUSE, ...FILLER, 'from', 'at', 'by', 'as', 'into', 'than', 'this', 'these', 'those', 'its', 'their']);
 const MAX_WORDS = 6;
 const MAX_LENGTH = 48;
 export const FALLBACK_SLUG = 'untitled-deck';
@@ -21,13 +23,20 @@ export function slugify(description) {
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
   while (words.length && LEADING.has(words[0])) words.shift();
-  const meaningful = words.filter((w) => !FILLER.has(w)).slice(0, MAX_WORDS);
-  let slug = '';
-  for (const word of meaningful) {
-    const next = slug ? `${slug}-${word}` : word;
-    if (next.length > MAX_LENGTH) break;
-    slug = next;
+  const meaningful = [];
+  for (const w of words) {
+    if (FILLER.has(w)) continue;
+    if (CLAUSE.has(w) && meaningful.length >= 2) break;
+    meaningful.push(w);
+    if (meaningful.length === MAX_WORDS) break;
   }
+  const kept = [];
+  for (const word of meaningful) {
+    if ([...kept, word].join('-').length > MAX_LENGTH) break;
+    kept.push(word);
+  }
+  while (kept.length > 1 && TRAILING.has(kept.at(-1))) kept.pop();
+  let slug = kept.join('-');
   if (!slug && meaningful.length) slug = meaningful[0].slice(0, MAX_LENGTH);
   return slug || FALLBACK_SLUG;
 }

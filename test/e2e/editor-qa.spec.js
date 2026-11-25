@@ -299,10 +299,11 @@ test.describe('m1 conflicts', () => {
     await diskEventually(deckhand.deckPath, (s) => s.includes('>Basic deck from tab two</h1>'));
 
     await blurEditing(page);
-    await expect(page.locator('.toast')).toContainText('This text changed in another tab');
+    const banner = page.locator('.banner', { hasText: 'changed in another tab' });
+    await expect(banner).toBeVisible();
     await expect(page.locator('.save-status')).toContainText("Couldn't save");
     await expect(mine).toHaveText('Basic deck from tab one');
-    await page.locator('.toast').getByRole('button', { name: 'Show theirs' }).click();
+    await banner.getByRole('button', { name: 'Use theirs' }).click();
     await expect(mine).toHaveText('Basic deck from tab two');
     await expect(page.locator('.save-status')).toHaveText('Saved');
     await other.close();

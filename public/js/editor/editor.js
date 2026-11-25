@@ -4,7 +4,8 @@ import { store } from '../store.js';
 import { icon } from '../ui/icons.js';
 import { toast, setToastHost } from '../ui/toast.js';
 import { attachEscape, pushEscape } from '../ui/escape.js';
-import { bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
+import { openModal } from '../ui/modal.js';
+import { aiIdOf, bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
 import { createSaver } from './saver.js';
 import { createManual } from './manual.js';
 import { mountOverlay } from './overlay.js';
@@ -105,6 +106,28 @@ export function createEditor({ onHome }) {
   ctx.manual = createManual(ctx);
   ctx.innerOf = (el) => ctx.manual.innerOf(el);
   ctx.onAllSaved = () => { if (state.reloadWanted && !ctx.editing) reload('tab'); };
+  ctx.onConflicts = (n) => setBanner('conflict', n ? {
+    tone: 'warning',
+    icon: 'warning',
+    text: n === 1
+      ? 'This text changed in another tab or on disk while you were editing it.'
+      : `${n} of your edits changed in another tab or on disk while you were editing them.`,
+    actions: [
+      { label: 'Keep mine', icon: 'check', onClick: () => saver.keepMine() },
+      { label: 'Use theirs', icon: 'refresh', onClick: () => saver.useTheirs() },
+    ],
+  } : null);
+  ctx.serverInnerOf = async (el) => {
+    const aiId = aiIdOf(el);
+    if (!aiId || !ctx.deck) return null;
+    const [source, live] = await Promise.all([
+      fetch(`${ctx.deck.url}${ctx.deck.url.includes('?') ? '&' : '?'}t=${Date.now()}`).then((r) => (r.ok ? r.text() : null)),
+      api.get('/api/state'),
+    ]);
+    if (!source || live.deck?.deckId !== ctx.deck.deckId) return null;
+    const node = new DOMParser().parseFromString(source, 'text/html').querySelector(`[data-ai-id="${CSS.escape(aiId)}"]`);
+    return node ? { inner: node.innerHTML, rev: live.deck.rev } : null;
+  };
   ctx.notesApi = mountNotes(ctx);
   ctx.dock = createDock(ctx);
   ctx.runs = mountRuns(ctx);
@@ -206,7 +229,7 @@ export function createEditor({ onHome }) {
     ctx.selected = null;
     ctx.notesApi.closePopovers();
     elsewhereText.textContent = `Another tab opened ${deck.name || deck.path.split('/').pop()}.`;
-    switchButton.onclick = onSwitch;
+    switchButton.onclick = () => confirmLeave(onSwitch);
     elsewhereHome.onclick = onHome;
     setPaused(true);
     syncControls();
@@ -240,10 +263,24 @@ export function createEditor({ onHome }) {
     await saver.flush();
   }
 
+  function confirmLeave(then) {
+    if (!saver.hasUnsaved()) { then(); return; }
+    openModal({
+      title: 'Leave without saving?',
+      width: 440,
+      body: h('p', { class: 't-small text-muted' }, "You have changes that haven't saved. Leave anyway? They'll be lost."),
+      actions: [
+        { label: 'Keep editing', primary: true, onClick: ({ close }) => close() },
+        { label: 'Leave without saving', danger: true, onClick: ({ close }) => { close(); saver.reset(); then(); } },
+      ],
+    });
+  }
+
   async function goHome() {
     try { await flushSaves(); } catch { /* go home anyway */ }
-    onHome();
+    confirmLeave(onHome);
   }
+
 
   function loadFrame(scroll) {
     state.pendingScroll = scroll;
@@ -328,6 +365,11 @@ export function createEditor({ onHome }) {
     }
   }
   document.addEventListener('keydown', onKey);
+  window.addEventListener('beforeunload', (e) => {
+    if (root.hidden || !saver.hasUnsaved()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
   document.addEventListener('paste', (e) => {
     if (root.hidden || document.querySelector('.dialog-scrim')) return;
     const t = document.activeElement;

@@ -30,6 +30,10 @@ export function createManual(ctx) {
     d.addEventListener('dblclick', onDblClick, true);
     d.addEventListener('contextmenu', (e) => ctx.notesApi.openFromContextMenu(e), true);
     d.addEventListener('paste', onPaste, true);
+    d.addEventListener('click', (e) => {
+      const link = e.target.closest && e.target.closest('a[href]');
+      if (link && !link.getAttribute('href').startsWith('#')) e.preventDefault();
+    }, true);
   }
 
   function select(t) { ctx.selected = t; }
@@ -87,7 +91,44 @@ export function createManual(ctx) {
     e.preventDefault();
     if (!ctx.canEdit()) return;
     if (!aiIdOf(t)) { toast(UNANCHORED, { tone: 'error' }); return; }
-    startEdit(t);
+    startEdit(t, { x: e.clientX, y: e.clientY });
+  }
+
+  const WORD_CHAR = /[\p{L}\p{N}_'’-]/u;
+
+  function rangeAtPoint(d, x, y) {
+    if (d.caretRangeFromPoint) return d.caretRangeFromPoint(x, y);
+    const pos = d.caretPositionFromPoint?.(x, y);
+    if (!pos) return null;
+    const r = d.createRange();
+    r.setStart(pos.offsetNode, pos.offset);
+    return r;
+  }
+
+  function placeCaret(t, point) {
+    const d = doc();
+    let range = point ? rangeAtPoint(d, point.x, point.y) : null;
+    if (!range || !t.contains(range.startContainer)) {
+      range = d.createRange();
+      range.selectNodeContents(t);
+      range.collapse(false);
+    } else if (range.startContainer.nodeType === Node.TEXT_NODE) {
+      const node = range.startContainer;
+      let start = range.startOffset;
+      let end = start;
+      while (start > 0 && WORD_CHAR.test(node.data[start - 1])) start--;
+      while (end < node.data.length && WORD_CHAR.test(node.data[end])) end++;
+      if (end > start) {
+        const word = d.createRange();
+        word.setStart(node, start);
+        word.setEnd(node, end);
+        const box = word.getBoundingClientRect();
+        if (point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom) range = word;
+      }
+    }
+    const sel = win().getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 
   function innerOf(t) {
@@ -95,20 +136,97 @@ export function createManual(ctx) {
     return /^\s*<br\s*\/?>\s*$/i.test(html) ? '' : html;
   }
 
+  function currentRange() {
+    const sel = win().getSelection();
+    return sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  }
+
+  const caretHolders = new Set();
+
+  function setCaret(node, offset) {
+    const range = doc().createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    const sel = win().getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function insertNodes(nodes) {
+    const range = currentRange();
+    if (!range || !nodes.length) return;
+    range.deleteContents();
+    const frag = doc().createDocumentFragment();
+    for (const n of nodes) frag.appendChild(n);
+    const last = nodes[nodes.length - 1];
+    range.insertNode(frag);
+    if (last.nodeType === Node.TEXT_NODE) {
+      setCaret(last, last.data.length);
+    } else {
+      const holder = doc().createTextNode('\u200B');
+      caretHolders.add(holder);
+      last.after(holder);
+      setCaret(holder, 1);
+    }
+    ctx.editing?.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function releaseCaretHolders() {
+    for (const holder of caretHolders) {
+      if (holder.isConnected) {
+        const data = holder.data.replace('\u200B', '');
+        if (data) holder.data = data;
+        else holder.remove();
+      }
+    }
+    caretHolders.clear();
+  }
+
+  function insertLineBreak() {
+    insertNodes([doc().createElement('br')]);
+  }
+
   function insertPlainText(text) {
     const d = doc();
-    const lines = text.replace(/\r\n?/g, '\n').split('\n');
-    lines.forEach((line, i) => {
-      if (i) d.execCommand('insertLineBreak');
-      if (line) d.execCommand('insertText', false, line);
+    const nodes = [];
+    text.replace(/\r\n?/g, '\n').split('\n').forEach((line, i) => {
+      if (i) nodes.push(d.createElement('br'));
+      if (line) nodes.push(d.createTextNode(line));
     });
+    insertNodes(nodes);
   }
 
   function onEditKeyDown(e) {
     if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
-    if (e.shiftKey) doc().execCommand('insertLineBreak');
+    if (e.shiftKey) insertLineBreak();
     else e.currentTarget.blur();
+  }
+
+  function onEditBeforeInput(e) {
+    if (e.inputType.startsWith('format')) { e.preventDefault(); return; }
+    if (e.inputType !== 'insertText' || !e.data) return;
+    const range = currentRange();
+    if (!range) return;
+    const start = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+    const link = start && start.closest('a');
+    if (!link || !e.currentTarget.contains(link)) return;
+    e.preventDefault();
+    range.deleteContents();
+    let node = range.startContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node.insertData(range.startOffset, e.data);
+      const at = doc().createRange();
+      at.setStart(node, range.startOffset + e.data.length);
+      at.collapse(true);
+      win().getSelection().removeAllRanges();
+      win().getSelection().addRange(at);
+    } else {
+      const text = doc().createTextNode(e.data);
+      range.insertNode(text);
+      setCaret(text, text.data.length);
+    }
+    e.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function onEditPaste(e) {
@@ -132,7 +250,7 @@ export function createManual(ctx) {
     if (text) insertPlainText(text);
   }
 
-  function startEdit(t) {
+  function startEdit(t, point = null) {
     clearSelection();
     ctx.editing = t;
     const before = innerOf(t);
@@ -140,18 +258,22 @@ export function createManual(ctx) {
     t.setAttribute('contenteditable', 'true');
     t.removeAttribute('data-dh-hover');
     t.addEventListener('keydown', onEditKeyDown);
+    t.addEventListener('beforeinput', onEditBeforeInput);
     t.addEventListener('paste', onEditPaste);
     t.addEventListener('drop', onEditDrop);
     t.focus();
+    if (point) placeCaret(t, point);
     const popEscape = pushEscape(() => { t.blur(); return true; });
     const onBlur = () => {
       popEscape();
       t.removeEventListener('blur', onBlur);
       t.removeEventListener('keydown', onEditKeyDown);
+      t.removeEventListener('beforeinput', onEditBeforeInput);
       t.removeEventListener('paste', onEditPaste);
       t.removeEventListener('drop', onEditDrop);
       t.removeAttribute('contenteditable');
       if (ctx.editing === t) ctx.editing = null;
+      releaseCaretHolders();
       const after = innerOf(t);
       if (after !== cleanInner(t)) setInnerHtml(t, after);
       if (after !== before && !ctx.canFinish()) {
@@ -269,8 +391,26 @@ export function createManual(ctx) {
     }
     const img = doc().createElement('img');
     img.setAttribute('src', url);
-    img.setAttribute('style', 'max-width: 40%;');
+    await floatOverSlide(img, currentSlide());
     if (insertElement(img)) select(img);
+  }
+
+  async function floatOverSlide(img, slide) {
+    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; max-width: 40%; visibility: hidden;');
+    slide.appendChild(img);
+    try { await img.decode(); } catch { /* measure whatever loaded */ }
+    const s = slide.getBoundingClientRect();
+    const view = win().innerHeight;
+    const visibleTop = Math.max(s.top, 0);
+    const visibleBottom = Math.min(s.bottom, view);
+    const maxWidth = Math.min(img.naturalWidth || 320, s.width * 0.4);
+    img.style.maxWidth = '';
+    img.style.width = `${Math.round(maxWidth)}px`;
+    const r = img.getBoundingClientRect();
+    const left = Math.round(s.left + (s.width - r.width) / 2 - r.left);
+    const top = Math.round(Math.max(s.top, visibleTop + (visibleBottom - visibleTop - r.height) / 2) - r.top);
+    img.remove();
+    img.setAttribute('style', `position: absolute; left: ${left}px; top: ${top}px; width: ${Math.round(r.width)}px; max-width: 40%;`);
   }
 
   function deleteSelected() {

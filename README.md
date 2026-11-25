@@ -4,7 +4,7 @@ Make slide decks with your AI, then finish them by hand.
 
 Deckhand is a local editor for decks that are a single HTML file. Describe the deck you want and your coding agent (Claude Code or Codex) builds it, or open one you already have. Then edit it like slides: change text in place, drag things around, drop in images. For anything bigger, right-click and leave a note, and hand the notes back to your agent in one click. The deck stays a plain `.html` file the whole time, and Deckhand only ever changes the bytes you changed.
 
-<!-- screenshot: home -->
+![Deckhand's Home screen, with Create a new deck on the left and Open a deck with recent decks on the right](docs/screenshots/home.png)
 
 ## Quick start
 
@@ -17,11 +17,19 @@ npm start
 
 Deckhand opens in your browser at `http://127.0.0.1:4321`. If that port is busy it picks the next free one and prints the real address. Press Ctrl+C to stop it; any agent it started stops too.
 
-To skip Home and go straight to a deck:
+To skip Home and go straight to a deck (the address Deckhand prints then opens that deck too):
 
 ```bash
 npm start -- /path/to/deck.html
 ```
+
+To try it on the sample deck:
+
+```bash
+npm run demo
+```
+
+The demo and "Try the sample deck" both open a copy in `~/Deckhand`, so your checkout of Deckhand never changes.
 
 Options: `--port <n>` to choose the port, `--no-open` to keep the browser closed.
 
@@ -31,15 +39,15 @@ Type what you want on Home ("a 6-slide pitch for our new coffee subscription, wa
 
 Deckhand gives your agent a short build contract along with your description: one self-contained HTML file, one `<section class="slide">` per slide, no network requests, real text elements you can edit. While it works you see what it's doing, a timer and a Stop button. When it finishes, the new deck opens in the editor.
 
-New decks are saved in `~/Deckhand`, named after your description (`coffee-subscription-pitch.html`, then `-2` if that's taken). If a run fails or you stop it, no half-written file is left behind.
+New decks are saved in `~/Deckhand`, named after the first few meaningful words of your description: the example above becomes `pitch-new-coffee-subscription-warm-minimal.html`, then `-2` if that's taken. If you stop a run, or it fails without a usable deck, nothing is left in `~/Deckhand`. If it fails after writing a complete, valid deck, Deckhand keeps that file and offers "Open what it made".
 
-<!-- screenshot: generation -->
+![The generation screen: the description, the agent, a timer, the file it will save as, and live activity from the agent](docs/screenshots/generation.png)
 
 ## Open a deck
 
 Pick one from Recent, use Browse… to find it, or paste its full path. Deckhand opens `.html` and `.htm` files, and tells you plainly when something isn't a deck ("That's a folder. Pick an .html file inside it."). Recent shows your last eight decks and marks any that have moved or been deleted as Missing.
 
-New here? Use "Try the sample deck".
+New here? Use "Try the sample deck". It opens a copy of the sample in `~/Deckhand`, so you can edit freely.
 
 ## Editing
 
@@ -56,7 +64,7 @@ Everything else is a note. Right-click an element, say what you want ("make this
 
 Every change is saved as you go. Deckhand edits the file's text in place, so formatting, comments and anything the deck's own scripts do at runtime never leak into the saved file. The only thing it adds is a `data-ai-id` attribute on editable elements, so notes and edits have a stable anchor.
 
-<!-- screenshot: editor with notes -->
+![The editor: the deck on the left with a note pin and the slide dock, and notes for the AI in the sidebar on the right](docs/screenshots/editor-notes.png)
 
 ## Hand off and runs
 
@@ -69,8 +77,6 @@ Deckhand looks for `claude` and `codex` on your PATH and in the usual install fo
 - The deck reloads live as the file changes, and stays on the slide you were looking at.
 
 When it's done you'll see how many notes it applied. Notes it didn't get to stay open, so nothing disappears silently. Stop ends the run straight away. Revert changes puts the deck and its notes back exactly as they were before the run.
-
-<!-- screenshot: run finished -->
 
 ## Where files live
 
@@ -86,7 +92,7 @@ Deckhand is a local tool and is built to stay that way.
 
 - It only listens on `127.0.0.1`.
 - Every request must carry a `127.0.0.1` or `localhost` Host header, which stops DNS rebinding.
-- API calls and the live-update socket must come from Deckhand's own page. Changes must be JSON, so another website can't read your folders, write your deck or start a run.
+- API calls and the live-update socket must come from Deckhand's own page, and changes must be sent as JSON (or as a raw image for uploads). So another website can't read your folders, write your deck or start a run.
 - Uploads must be real images (PNG, JPEG, GIF, WebP or SVG), up to 20 MB, and are only written to the deck's `deckhand-assets/` folder.
 - Paths are checked after decoding, so `..` tricks are refused. Deckhand only serves web files from the deck's folder (pages, styles, scripts, images, fonts and media), never hidden files.
 - Agents run in a temporary copy of the deck's folder. Only the deck, its work order and new images are copied back. Claude Code is limited to file tools inside that folder. Codex runs in its workspace sandbox with network access off.
@@ -108,8 +114,10 @@ npm run test:e2e      # browser tests only
 npm run test:live     # one real Claude Code run (needs a logged-in claude; uses tokens)
 ```
 
-The tests use fake `claude` and `codex` CLIs, so they never call a real agent. The browser tests need Playwright's Chromium, which you install once with `npx playwright install chromium`. Running the app itself doesn't need it.
+The tests use fake `claude` and `codex` CLIs, so they never call a real agent. In tests, a `[[fake:<scenario>]]` marker in a description or note picks one of the fake agent's scenarios in `test/fixtures/scenarios/`. The real agents treat it as ordinary text. The browser tests need Playwright's Chromium, which you install once with `npx playwright install chromium`. Running the app itself doesn't need it.
+
+`npx playwright test test/e2e/screenshots.spec.js` writes screenshots of every screen to `test-results/screenshots/`.
 
 ## Licence
 
-MIT
+MIT. See [LICENSE](LICENSE).

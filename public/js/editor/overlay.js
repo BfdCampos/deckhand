@@ -22,6 +22,8 @@ export function mountOverlay(ctx) {
       return;
     }
     const fr = deckEl.getBoundingClientRect();
+    const clip = `inset(${fr.top}px ${Math.max(0, innerWidth - fr.right)}px ${Math.max(0, innerHeight - fr.bottom)}px ${fr.left}px)`;
+    if (ov.style.clipPath !== clip) ov.style.clipPath = clip;
     positionChrome(fr);
     updatePins(fr);
   }
