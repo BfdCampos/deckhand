@@ -36,7 +36,7 @@ const DECK_ASSET_EXTS = new Set([
 ]);
 
 function deckFileAllowed(rel) {
-  const segments = rel.split('/').filter(Boolean);
+  const segments = rel.split(/[/\\]/).filter(Boolean);
   if (!segments.length || segments.some((s) => s.startsWith('.'))) return false;
   const name = segments.at(-1).toLowerCase();
   return DECK_ASSET_EXTS.has(path.extname(name)) || name.endsWith('.deckhand.json');
