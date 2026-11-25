@@ -3,9 +3,19 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { icon } from '../ui/icons.js';
 import { detectAgents, foundAgents, selectedAgent } from '../ui/agent-chip.js';
-import { isMac } from './paths.js';
+import { isMac, middleTruncate } from './paths.js';
 
 export const DRAFT_KEY = 'deckhand.draft';
+const SHOWN_PATH = 56;
+
+function shortPath(where) {
+  if (!where || where.length <= SHOWN_PATH) return where;
+  const cut = where.lastIndexOf('/') + 1;
+  const dir = where.slice(0, cut);
+  const name = where.slice(cut);
+  const room = Math.max(12, SHOWN_PATH - dir.length);
+  return dir + middleTruncate(name, room);
+}
 const TARGET_CHARS = 500;
 
 const PLACEHOLDER = "Describe the deck you want. Who's it for, what should it say, how many slides, any look and feel. For example: a 6-slide pitch for our new coffee subscription, warm and minimal, for the leadership team.";
@@ -45,7 +55,7 @@ export function createCreateCard({ getInfo, onStarted }) {
     'aria-label': 'Describe the deck you want',
     spellcheck: 'true',
   });
-  const target = h('span', { class: 'create-target truncate' }, 'Saves to ', h('span', { class: 'create-target-path' }, '~/Deckhand'));
+  const target = h('span', { class: 'create-target' }, 'Saves to ', h('span', { class: 'create-target-path' }, '~/Deckhand'));
   const submit = h('button', { type: 'button', class: 'btn btn-primary btn-lg create-submit', disabled: true },
     'Create deck', h('span', { class: 'kbd', 'aria-hidden': 'true' }, isMac() ? '⌘ Enter' : 'Ctrl Enter'));
   const errorText = h('span', null);
@@ -85,21 +95,24 @@ export function createCreateCard({ getInfo, onStarted }) {
     return getInfo()?.decksDirLabel || '~/Deckhand';
   }
 
-  function updateTarget() {
+  function updateTarget({ now = false } = {}) {
     clearTimeout(timer);
     const mine = ++seq;
     const text = textarea.value.trim();
     if (!text) { setTarget('Saves to', decksLabel()); return; }
-    timer = setTimeout(async () => {
+    if (now) setTarget('Saves to', decksLabel());
+    const lookup = async () => {
       try {
         const res = await api.post('/api/create/target', { description: text.slice(0, TARGET_CHARS) });
         if (mine === seq && res?.display) setTarget('Saves as', res.display);
       } catch { /* keep the last line */ }
-    }, 150);
+    };
+    if (now) lookup();
+    else timer = setTimeout(lookup, 150);
   }
 
   function setTarget(lead, where) {
-    target.replaceChildren(`${lead} `, h('span', { class: 'create-target-path' }, where));
+    target.replaceChildren(`${lead} `, h('span', { class: 'create-target-path' }, shortPath(where)));
     target.title = where;
   }
 
@@ -193,9 +206,9 @@ export function createCreateCard({ getInfo, onStarted }) {
       textarea.value = text || '';
       writeDraft(textarea.value);
       setError('');
-      updateTarget();
+      updateTarget({ now: true });
       sync();
     },
-    refreshTarget: updateTarget,
+    refreshTarget: () => updateTarget({ now: true }),
   };
 }
