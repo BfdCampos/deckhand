@@ -127,7 +127,8 @@ export function createHttp({ config, guard, deckDir }) {
 
   function sendError(req, res, err, isApi) {
     if (!(err instanceof HttpError)) {
-      console.error('[deckhand] request failed:', err?.stack || err);
+      if (err?.code === 'ECONNRESET' || err?.message === 'aborted') return res.destroy();
+      console.error(`[deckhand] request failed: ${err?.message || err}`);
       err = new HttpError(500, 'internal', 'Something went wrong.');
     }
     if (res.headersSent) return res.destroy();
