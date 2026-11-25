@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const SERVER = path.join(ROOT, 'server.js');
 const NODE_DIR = path.dirname(process.execPath);
+const live = new Set();
+process.on('exit', () => { for (const p of live) { try { p.kill('SIGKILL'); } catch {} } });
 
 export async function tempDir(prefix = 'deckhand-test-') {
   return fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), prefix)));
@@ -48,7 +50,8 @@ export async function startDeckhand({ args = [], env = {}, binDir = null, portAr
   let err = '';
   proc.stdout.on('data', (d) => { out += d; });
   proc.stderr.on('data', (d) => { err += d; });
-  const exited = new Promise((resolve) => proc.on('exit', (code, signal) => resolve({ code, signal })));
+  live.add(proc);
+  const exited = new Promise((resolve) => proc.on('exit', (code, signal) => { live.delete(proc); resolve({ code, signal }); }));
 
   const port = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`server did not start\nstdout:\n${out}\nstderr:\n${err}`)), 5000);

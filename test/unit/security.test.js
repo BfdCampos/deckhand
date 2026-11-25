@@ -55,8 +55,9 @@ describe('security', () => {
     if (!lan) return;
     const refused = await new Promise((resolve) => {
       const s = net.connect({ host: lan.address, port: srv.port });
-      s.on('connect', () => { s.destroy(); resolve(false); });
-      s.on('error', () => resolve(true));
+      const timer = setTimeout(() => { s.destroy(); resolve(true); }, 1000);
+      s.on('connect', () => { clearTimeout(timer); s.destroy(); resolve(false); });
+      s.on('error', () => { clearTimeout(timer); resolve(true); });
     });
     assert.ok(refused, `reachable on ${lan.address}`);
   });
