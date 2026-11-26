@@ -5,6 +5,7 @@ import { icon } from '../ui/icons.js';
 import { createAgentChip, setAgents } from '../ui/agent-chip.js';
 import { createCreateCard, readDraft } from './create-card.js';
 import { createOpenCard } from './open-card.js';
+import { fileName } from './paths.js';
 
 export function createHome({ openDeck, onCreateStarted, onWatchRun, onContinue }) {
   let info = null;
@@ -19,9 +20,11 @@ export function createHome({ openDeck, onCreateStarted, onWatchRun, onContinue }
   const running = h('div', { class: 'banner banner-info home-running', role: 'status', hidden: true },
     h('span', { class: 'dot dot-working' }), runningText, h('span', { class: 'grow' }), watch);
 
-  const continueName = h('span', { class: 'truncate' });
+  const continueName = h('span', { class: 'home-continue-name' });
   const continueBtn = h('button', { type: 'button', class: 'btn btn-secondary home-continue', hidden: true, onclick: () => onContinue() },
-    icon('deck'), h('span', null, 'Continue editing ', continueName), icon('arrow-right', { size: 14 }));
+    icon('deck'),
+    h('span', { class: 'home-continue-label' }, h('span', { class: 'home-continue-lead' }, 'Continue editing\u00a0'), continueName),
+    icon('arrow-right', { size: 14 }));
 
   const el = h('main', { class: 'home', hidden: true },
     h('div', { class: 'home-inner' },
@@ -38,7 +41,9 @@ export function createHome({ openDeck, onCreateStarted, onWatchRun, onContinue }
   function renderContinue() {
     const { deck } = store.get();
     continueBtn.hidden = !deck;
-    if (deck) continueName.textContent = deck.name;
+    if (!deck) return;
+    continueName.replaceChildren(fileName(deck.name));
+    continueBtn.title = deck.path;
   }
 
   function renderRunning() {
@@ -50,11 +55,14 @@ export function createHome({ openDeck, onCreateStarted, onWatchRun, onContinue }
     if (!active) return;
     const who = run.agentName || 'Your agent';
     if (run.kind === 'create') {
-      runningText.textContent = `${who} is building a deck`;
+      runningText.replaceChildren(`${who} is building a deck`);
+      runningText.removeAttribute('title');
       watch.hidden = false;
       watch.onclick = () => onWatchRun(run.id);
     } else {
-      runningText.textContent = `${who} is editing ${run.targetPath ? run.targetPath.split('/').pop() : 'a deck'}`;
+      const name = run.targetPath ? run.targetPath.split('/').pop() : null;
+      runningText.replaceChildren(`${who} is editing\u00a0`, name ? fileName(name) : 'a deck');
+      runningText.title = run.targetPath || '';
       watch.hidden = false;
       watch.onclick = () => onContinue();
     }
