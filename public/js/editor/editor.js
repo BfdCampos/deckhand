@@ -256,6 +256,11 @@ export function createEditor({ onHome }) {
     pillText.textContent = message || 'Your agent is editing your deck…';
     veil.hidden = !ctx.locked;
     syncControls();
+    if (ctx.locked) {
+      const pillBox = veil.querySelector('.editor-pill').getBoundingClientRect();
+      const stageBox = stage.getBoundingClientRect();
+      if (pillBox.height) stage.style.setProperty('--toast-top', `${Math.ceil(pillBox.bottom - stageBox.top + 8)}px`);
+    }
     ctx.notesApi.render();
   }
 
