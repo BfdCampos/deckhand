@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { test, expect } from './fixtures.js';
 import { BASIC, THREE, addNotes, openEditor, handoff, card, sidecar } from './runs-helpers.js';
-import { deckFrame, blurEditing, caretToEnd, diskEventually } from './editor-helpers.js';
+import { deckFrame, blurEditing, caretToEnd, diskEventually, frameGen } from './editor-helpers.js';
 
 async function recordToasts(page) {
   await page.evaluate(() => {
@@ -45,18 +45,29 @@ test.describe('while locked', () => {
   test('a toast sits below the lock pill, never on top of it', async ({ page, deckhand }) => {
     await addNotes(deckhand, THREE);
     await openEditor(page, deckhand);
+    const before = await frameGen(page);
     await handoff(page).click();
     const pill = page.locator('.editor-pill');
     await expect(pill).toBeVisible();
     await expect(deckFrame(page).locator('h1')).toHaveText(/^Edited: /);
+    await expect.poll(() => frameGen(page)).toBeGreaterThan(before);
+    const settled = await frameGen(page);
     await fs.appendFile(deckhand.deckPath, '\n<!-- external -->\n');
-    const toast = page.locator('.toast', { hasText: 'Updated from disk' });
+    await expect.poll(() => frameGen(page), { timeout: 10_000 }).toBeGreaterThan(settled);
+    const toast = page.locator('.toast.is-in', { hasText: 'Updated from disk' });
     await expect(toast).toBeVisible();
-    const a = await pill.boundingBox();
-    const b = await toast.boundingBox();
-    const overlap = !(b.y >= a.y + a.height || b.y + b.height <= a.y || b.x >= a.x + a.width || b.x + b.width <= a.x);
-    expect(overlap).toBe(false);
+    const boxes = await page.evaluate(() => {
+      const t = [...document.querySelectorAll('.toast')].find((n) => n.textContent.includes('Updated from disk'));
+      const p = document.querySelector('.editor-pill');
+      const box = (n) => { const r = n.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+      return t && p ? { toast: box(t), pill: box(p) } : null;
+    });
+    expect(boxes).not.toBeNull();
+    const { toast: b, pill: a } = boxes;
+    expect(b.top >= a.bottom || b.bottom <= a.top || b.left >= a.right || b.right <= a.left).toBe(true);
+    expect(b.top).toBeGreaterThanOrEqual(a.bottom);
   });
+
 });
 
 test.describe('done notes', () => {
