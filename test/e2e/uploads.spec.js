@@ -22,7 +22,7 @@ test('AC-30 "+ Image" uploads, inserts on the current slide, selects and saves',
   const img = deckFrame(page).locator('section').first().locator('img');
   await expect(img).toBeVisible();
   await expect(page.locator('.handle').first()).toBeVisible();
-  await diskEventually(deckhand.deckPath, (s) => /<img data-ai-id="dh\d+" src="deckhand-assets\/[^"]*logo[^"]*\.png" style="position: absolute; left: -?\d+px; top: -?\d+px; width: \d+px; max-width: 40%;">/.test(s));
+  await diskEventually(deckhand.deckPath, (s) => /<img data-ai-id="dh\d+" src="deckhand-assets\/[^"]*logo[^"]*\.png" style="position: absolute; left: [\d.]+%; top: [\d.]+%; width: [\d.]+%; z-index: \d+;">/.test(s));
   const files = await fs.readdir(assetsDir(deckhand));
   expect(files.some((f) => /logo.*\.png$/.test(f))).toBe(true);
 });
