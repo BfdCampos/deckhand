@@ -99,15 +99,19 @@ export function createSaver(ctx) {
   async function send(item) {
     if (!ctx.deck) return 'done';
     if (item.kind === 'replay') return replaySend(item);
-    const op = item.build();
-    if (!op) return 'done';
+    const built = item.build();
+    if (!built) return 'done';
+    const ops = Array.isArray(built) ? built : [built];
+    if (!item.opIds || item.opIds.length !== ops.length) item.opIds = ops.map((_, i) => (i === 0 ? item.opId : crypto.randomUUID()));
     const text = item.kind === 'text';
     try {
-      const res = await api.post('/api/deck/ops', deckBody({ baseRev: item.baseRev, ops: [{ ...op, opId: item.opId }] }));
+      const res = await api.post('/api/deck/ops', deckBody({ baseRev: item.baseRev, ops: ops.map((op, i) => ({ ...op, opId: item.opIds[i] })) }));
       ctx.rev = Math.max(ctx.rev, res.rev);
-      const result = res.results[0] || { opId: item.opId };
+      const results = ops.map((_, i) => res.results[i] || { opId: item.opIds[i] });
+      const result = Array.isArray(built) ? results : results[0];
       if (item.entry) {
-        item.entry.opId = result.opId || item.opId;
+        item.entry.opIds = results.map((r, i) => r.opId || item.opIds[i]);
+        item.entry.opId = item.entry.opIds[0];
         item.entry.settled = true;
       }
       if (text && result.changed === false && item.text.after !== item.text.before) {
@@ -227,8 +231,11 @@ export function createSaver(ctx) {
     const live = () => entry.gen === ctx.gen;
     if (!item.early && live()) item.forward();
     try {
-      const res = await api.post(`/api/deck/${direction}`, deckBody({ opId: entry.opId }));
-      ctx.rev = Math.max(ctx.rev, res.rev);
+      const ids = entry.opIds || [entry.opId];
+      for (const opId of direction === 'undo' ? [...ids].reverse() : ids) {
+        const res = await api.post(`/api/deck/${direction}`, deckBody({ opId }));
+        ctx.rev = Math.max(ctx.rev, res.rev);
+      }
       if (!live()) ctx.reload();
     } catch (err) {
       history.remove(entry);
@@ -266,9 +273,12 @@ export function createSaver(ctx) {
     ctx.onConflicts?.(conflictCount());
   }
 
-  function queueText(target, before, baseRev) {
+  function queueText(target, before, baseRev, { undoable = false } = {}) {
     const opId = crypto.randomUUID();
-    const item = { kind: 'text', el: target, opId, text: { before, after: ctx.innerOf(target) }, baseRev };
+    const after = ctx.innerOf(target);
+    const entry = undoable ? makeEntry(() => ctx.setInner(target, before), () => ctx.setInner(target, after)) : null;
+    if (entry) entry.opId = opId;
+    const item = { kind: 'text', el: target, opId, text: { before, after }, baseRev, entry };
     item.build = () => textOp(target, item);
     queue.push(item);
   }
@@ -283,7 +293,7 @@ export function createSaver(ctx) {
         continue;
       }
       dirty.delete(target);
-      queueText(target, server.inner, server.rev);
+      queueText(target, server.inner, server.rev, { undoable: true });
     }
     conflictsChanged();
     render();
