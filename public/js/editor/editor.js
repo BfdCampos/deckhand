@@ -5,7 +5,7 @@ import { icon } from '../ui/icons.js';
 import { toast, setToastHost } from '../ui/toast.js';
 import { attachEscape, pushEscape } from '../ui/escape.js';
 import { openModal } from '../ui/modal.js';
-import { aiIdOf, bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
+import { aiIdOf, setInnerHtml, bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
 import { createSaver } from './saver.js';
 import { createManual } from './manual.js';
 import { mountOverlay } from './overlay.js';
@@ -105,6 +105,7 @@ export function createEditor({ onHome }) {
   bindFrame(iframe);
   ctx.manual = createManual(ctx);
   ctx.innerOf = (el) => ctx.manual.innerOf(el);
+  ctx.setInner = setInnerHtml;
   ctx.onAllSaved = () => { if (state.reloadWanted && !ctx.editing) reload('tab'); };
   ctx.onConflicts = (n) => setBanner('conflict', n ? {
     tone: 'warning',

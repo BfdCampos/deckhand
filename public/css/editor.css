@@ -72,7 +72,7 @@
 .dock-tile.active { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dock-thumb { width: 1280px; height: 720px; border: 0; transform-origin: top left; transform: scale(0.0806); pointer-events: none; display: block; background: #fff; transition: transform var(--dur-pop) var(--ease-out); }
 .dock-tile:hover .dock-thumb { transform: scale(0.1208); }
-.dock-tile .dock-num { position: absolute; top: 4px; left: 4px; z-index: 1; min-width: 16px; padding: 2px 4px; font-size: 10px; font-weight: var(--fw-semibold); line-height: 1; text-align: center; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-xs); box-shadow: 0 1px 3px #0008; pointer-events: none; }
+.dock-tile .dock-num { position: absolute; right: 3px; bottom: 3px; z-index: 1; min-width: 15px; padding: 2px 4px; font-size: 10px; font-weight: var(--fw-semibold); line-height: 1; text-align: center; font-variant-numeric: tabular-nums; color: #fff; background: #0f1117b3; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border-radius: var(--radius-xs); pointer-events: none; }
 .dock-tile.active .dock-num { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 
 .sel-box { position: fixed; border: 2px solid var(--select); border-radius: 3px; box-shadow: 0 0 0 4px #3b82f61f; pointer-events: none; z-index: 45; }
