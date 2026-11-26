@@ -2,7 +2,7 @@ import { h } from '../dom.js';
 import { api } from '../api.js';
 import { icon } from '../ui/icons.js';
 import { openBrowse } from './browse-modal.js';
-import { homeOf, middleTruncate, openErrorText, relativeTime, tildify } from './paths.js';
+import { fileName, homeOf, middleTruncate, openErrorText, relativeTime, tildify } from './paths.js';
 
 const SHOWN = 8;
 
@@ -100,7 +100,7 @@ export function createOpenCard({ openDeck, getInfo }) {
     },
     icon(item.missing ? 'alert' : 'deck', { className: 'recent-icon' }),
     h('span', { class: 'recent-text' },
-      h('span', { class: 'recent-name' }, item.name),
+      h('span', { class: 'recent-name' }, fileName(item.name)),
       h('span', { class: 'recent-dir mono' }, middleTruncate(dir, 44))),
     item.missing
       ? h('span', { class: 'tag recent-missing' }, 'Missing')

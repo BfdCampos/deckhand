@@ -42,7 +42,14 @@
 .home-lead { max-width: 560px; }
 
 .home-running { margin-bottom: var(--space-4); }
-.home-running-text { font-weight: var(--fw-medium); }
+.home-running-text { display: flex; flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; font-weight: var(--fw-medium); }
+.home-running .btn, .home-running .dot { flex: none; }
+
+/* File names: keep the start and the extension, trim the middle */
+
+.fname { display: flex; min-width: 0; max-width: 100%; white-space: nowrap; }
+.fname-head { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fname-tail { flex: none; white-space: pre; }
 
 /* Cards */
 
@@ -150,7 +157,7 @@
 .recent-open:hover, .recent-open:focus-visible { background: var(--hover); }
 .recent-icon { flex: none; color: var(--accent); }
 .recent-text { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
-.recent-name { font-size: var(--fs-13); font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-name { display: flex; min-width: 0; font-size: var(--fs-13); font-weight: var(--fw-semibold); white-space: nowrap; }
 .recent-dir { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-time { flex: none; font-size: var(--fs-12); color: var(--muted); transition: opacity var(--dur-fast) var(--ease-out); }
 .recent-missing { flex: none; margin-right: 28px; }
@@ -299,7 +306,10 @@
 .open-path:placeholder-shown { font-family: var(--font-sans); font-size: var(--fs-13); }
 .deep-link { display: flex; flex-direction: column; gap: var(--space-3); }
 .deep-link-path { padding: var(--space-3); color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-control); overflow-wrap: anywhere; }
-.home-continue { align-self: flex-start; margin-top: var(--space-2); max-width: 100%; }
+.home-continue { align-self: flex-start; justify-content: flex-start; margin-top: var(--space-2); max-width: 100%; min-width: 0; }
+.home-continue-label { display: flex; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.home-continue-lead { flex: none; }
+.home-continue-name { display: flex; min-width: 0; }
 .open-busy { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); color: var(--ink-2); background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-control); }
 .home-open.is-busy .recents { opacity: 0.55; }
 .browse-empty { padding: var(--space-6) var(--space-3); text-align: center; }
