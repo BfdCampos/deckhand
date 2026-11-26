@@ -4,7 +4,10 @@ Make slide decks with your AI, then finish them by hand.
 
 Deckhand is a local editor for decks that are a single HTML file. Describe the deck you want and your coding agent (Claude Code or Codex) builds it, or open one you already have. Then edit it like slides: change text in place, drag things around, drop in images. For anything bigger, right-click and leave a note, and hand the notes back to your agent in one click. The deck stays a plain `.html` file the whole time, and Deckhand only ever changes the bytes you changed.
 
-![Deckhand's Home screen, with Create a new deck on the left and Open a deck with recent decks on the right](docs/screenshots/home.png)
+It follows your system's light or dark appearance.
+
+![Deckhand's Home screen, with Create a new deck on the left and Open a deck with recent decks on the right](docs/screenshots/home.png#gh-dark-mode-only)
+![Deckhand's Home screen, with Create a new deck on the left and Open a deck with recent decks on the right](docs/screenshots/home-light.png#gh-light-mode-only)
 
 ## Quick start
 
@@ -41,7 +44,8 @@ Deckhand gives your agent a short build contract along with your description: on
 
 New decks are saved in `~/Deckhand`, named after the first few meaningful words of your description: the example above becomes `pitch-new-coffee-subscription-warm-minimal.html`, then `-2` if that's taken. If you stop a run, or it fails without a usable deck, nothing is left in `~/Deckhand`. If it fails after writing a complete, valid deck, Deckhand keeps that file and offers "Open what it made".
 
-![The generation screen: the description, the agent, a timer, the file it will save as, and live activity from the agent](docs/screenshots/generation.png)
+![The generation screen: the description, the agent, a timer, the file it will save as, and live activity from the agent](docs/screenshots/generation.png#gh-dark-mode-only)
+![The generation screen: the description, the agent, a timer, the file it will save as, and live activity from the agent](docs/screenshots/generation-light.png#gh-light-mode-only)
 
 ## Open a deck
 
@@ -64,7 +68,8 @@ Everything else is a note. Right-click an element, say what you want ("make this
 
 Every change is saved as you go. Deckhand edits the file's text in place, so formatting, comments and anything the deck's own scripts do at runtime never leak into the saved file. The only thing it adds is a `data-ai-id` attribute on editable elements, so notes and edits have a stable anchor.
 
-![The editor: the deck on the left with a note pin and the slide dock, and notes for the AI in the sidebar on the right](docs/screenshots/editor-notes.png)
+![The editor: the deck on the left with a note pin and the slide dock, and notes for the AI in the sidebar on the right](docs/screenshots/editor-notes.png#gh-dark-mode-only)
+![The editor: the deck on the left with a note pin and the slide dock, and notes for the AI in the sidebar on the right](docs/screenshots/editor-notes-light.png#gh-light-mode-only)
 
 ## Hand off and runs
 
