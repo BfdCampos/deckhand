@@ -238,7 +238,7 @@
 /* Generation */
 
 .gen-head { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-6) 0 var(--space-6); }
-.gen-eyebrow { color: var(--accent); }
+.gen-eyebrow { color: var(--accent-ink); }
 .gen-quote-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 .gen-quote {
   margin: var(--space-1) 0 0;
@@ -299,3 +299,11 @@
 .open-path:placeholder-shown { font-family: var(--font-sans); font-size: var(--fs-13); }
 .deep-link { display: flex; flex-direction: column; gap: var(--space-3); }
 .deep-link-path { padding: var(--space-3); color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: var(--radius-control); overflow-wrap: anywhere; }
+.home-continue { align-self: flex-start; margin-top: var(--space-2); max-width: 100%; }
+.open-busy { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); color: var(--ink-2); background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-control); }
+.home-open.is-busy .recents { opacity: 0.55; }
+.browse-empty { padding: var(--space-6) var(--space-3); text-align: center; }
+.create-target { overflow: hidden; white-space: nowrap; }
+.gen-wait { color: var(--muted); }
+.open-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.open-foot .open-browse { align-self: auto; }

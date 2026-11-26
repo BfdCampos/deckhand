@@ -1,0 +1,8 @@
+{
+  "description": "Runs UI: a create that starts writing the deck and then waits until stopped, like a real agent writing a big file.",
+  "steps": [
+    { "emit": "init" },
+    { "emit": "write", "contentFrom": "two-slide.html" },
+    { "hang": true }
+  ]
+}

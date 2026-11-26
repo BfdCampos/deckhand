@@ -30,6 +30,10 @@ export function createManual(ctx) {
     d.addEventListener('dblclick', onDblClick, true);
     d.addEventListener('contextmenu', (e) => ctx.notesApi.openFromContextMenu(e), true);
     d.addEventListener('paste', onPaste, true);
+    d.addEventListener('click', (e) => {
+      const link = e.target.closest && e.target.closest('a[href]');
+      if (link && !link.getAttribute('href').startsWith('#')) e.preventDefault();
+    }, true);
   }
 
   function select(t) { ctx.selected = t; }
@@ -42,6 +46,7 @@ export function createManual(ctx) {
     if (!ctx.canEdit()) return;
     select(t);
     e.preventDefault();
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement !== frameEl()) document.activeElement.blur();
     const tr = parseTranslate(t);
     drag = { t, x0: e.clientX, y0: e.clientY, tx0: tr.x, ty0: tr.y, moved: false, prevStyle: t.getAttribute('style') };
     const d = doc();
@@ -49,7 +54,8 @@ export function createManual(ctx) {
       const dx = ev.clientX - drag.x0, dy = ev.clientY - drag.y0;
       if (!drag.moved && Math.hypot(dx, dy) < 4) return;
       drag.moved = true;
-      drag.t.style.transform = `translate(${Math.round(drag.tx0 + dx)}px, ${Math.round(drag.ty0 + dy)}px)`;
+      drag.value = `${Math.round(drag.tx0 + dx)}px ${Math.round(drag.ty0 + dy)}px`;
+      drag.t.style.translate = drag.value;
     };
     const up = () => {
       d.removeEventListener('mousemove', move, true);
@@ -57,8 +63,8 @@ export function createManual(ctx) {
       const done = drag;
       drag = null;
       if (!done.moved) return;
-      if (!ctx.canEdit()) { setStyleAttr(done.t, done.prevStyle); return; }
-      saveStyle(done.t, done.prevStyle, { transform: done.t.style.transform });
+      if (!ctx.canFinish()) { setStyleAttr(done.t, done.prevStyle); return; }
+      saveStyle(done.t, done.prevStyle, { translate: done.value });
     };
     d.addEventListener('mousemove', move, true);
     d.addEventListener('mouseup', up, true);
@@ -85,27 +91,198 @@ export function createManual(ctx) {
     e.preventDefault();
     if (!ctx.canEdit()) return;
     if (!aiIdOf(t)) { toast(UNANCHORED, { tone: 'error' }); return; }
-    startEdit(t);
+    startEdit(t, { x: e.clientX, y: e.clientY });
   }
 
-  function startEdit(t) {
+  const WORD_CHAR = /[\p{L}\p{N}_'’-]/u;
+
+  function rangeAtPoint(d, x, y) {
+    if (d.caretRangeFromPoint) return d.caretRangeFromPoint(x, y);
+    const pos = d.caretPositionFromPoint?.(x, y);
+    if (!pos) return null;
+    const r = d.createRange();
+    r.setStart(pos.offsetNode, pos.offset);
+    return r;
+  }
+
+  function placeCaret(t, point) {
+    const d = doc();
+    let range = point ? rangeAtPoint(d, point.x, point.y) : null;
+    if (!range || !t.contains(range.startContainer)) {
+      range = d.createRange();
+      range.selectNodeContents(t);
+      range.collapse(false);
+    } else if (range.startContainer.nodeType === Node.TEXT_NODE) {
+      const node = range.startContainer;
+      let start = range.startOffset;
+      let end = start;
+      while (start > 0 && WORD_CHAR.test(node.data[start - 1])) start--;
+      while (end < node.data.length && WORD_CHAR.test(node.data[end])) end++;
+      if (end > start) {
+        const word = d.createRange();
+        word.setStart(node, start);
+        word.setEnd(node, end);
+        const box = word.getBoundingClientRect();
+        if (point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom) range = word;
+      }
+    }
+    const sel = win().getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function innerOf(t) {
+    const html = cleanInner(t);
+    return /^\s*<br\s*\/?>\s*$/i.test(html) ? '' : html;
+  }
+
+  function currentRange() {
+    const sel = win().getSelection();
+    return sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  }
+
+  const caretHolders = new Set();
+
+  function setCaret(node, offset) {
+    const range = doc().createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    const sel = win().getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function insertNodes(nodes) {
+    const range = currentRange();
+    if (!range || !nodes.length) return;
+    range.deleteContents();
+    const frag = doc().createDocumentFragment();
+    for (const n of nodes) frag.appendChild(n);
+    const last = nodes[nodes.length - 1];
+    range.insertNode(frag);
+    if (last.nodeType === Node.TEXT_NODE) {
+      setCaret(last, last.data.length);
+    } else {
+      const holder = doc().createTextNode('\u200B');
+      caretHolders.add(holder);
+      last.after(holder);
+      setCaret(holder, 1);
+    }
+    ctx.editing?.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function releaseCaretHolders() {
+    for (const holder of caretHolders) {
+      if (holder.isConnected) {
+        const data = holder.data.replace('\u200B', '');
+        if (data) holder.data = data;
+        else holder.remove();
+      }
+    }
+    caretHolders.clear();
+  }
+
+  function insertLineBreak() {
+    insertNodes([doc().createElement('br')]);
+  }
+
+  function insertPlainText(text) {
+    const d = doc();
+    const nodes = [];
+    text.replace(/\r\n?/g, '\n').split('\n').forEach((line, i) => {
+      if (i) nodes.push(d.createElement('br'));
+      if (line) nodes.push(d.createTextNode(line));
+    });
+    insertNodes(nodes);
+  }
+
+  function onEditKeyDown(e) {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    if (e.shiftKey) insertLineBreak();
+    else e.currentTarget.blur();
+  }
+
+  function onEditBeforeInput(e) {
+    if (e.inputType.startsWith('format')) { e.preventDefault(); return; }
+    if (e.inputType !== 'insertText' || !e.data) return;
+    const range = currentRange();
+    if (!range) return;
+    const start = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+    const link = start && start.closest('a');
+    if (!link || !e.currentTarget.contains(link)) return;
+    e.preventDefault();
+    range.deleteContents();
+    let node = range.startContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node.insertData(range.startOffset, e.data);
+      const at = doc().createRange();
+      at.setStart(node, range.startOffset + e.data.length);
+      at.collapse(true);
+      win().getSelection().removeAllRanges();
+      win().getSelection().addRange(at);
+    } else {
+      const text = doc().createTextNode(e.data);
+      range.insertNode(text);
+      setCaret(text, text.data.length);
+    }
+    e.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function onEditPaste(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const data = e.clipboardData;
+    if (!data) return;
+    const image = [...data.items].find((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (image) {
+      const file = image.getAsFile();
+      if (file) fileToDeck(file);
+      return;
+    }
+    const text = data.getData('text/plain');
+    if (text) insertPlainText(text);
+  }
+
+  function onEditDrop(e) {
+    e.preventDefault();
+    const text = e.dataTransfer && e.dataTransfer.getData('text/plain');
+    if (text) insertPlainText(text);
+  }
+
+  function startEdit(t, point = null) {
     clearSelection();
     ctx.editing = t;
-    const before = cleanInner(t);
+    const before = innerOf(t);
+    const startRev = ctx.rev;
     t.setAttribute('contenteditable', 'true');
     t.removeAttribute('data-dh-hover');
+    t.addEventListener('keydown', onEditKeyDown);
+    t.addEventListener('beforeinput', onEditBeforeInput);
+    t.addEventListener('paste', onEditPaste);
+    t.addEventListener('drop', onEditDrop);
     t.focus();
+    if (point) placeCaret(t, point);
     const popEscape = pushEscape(() => { t.blur(); return true; });
     const onBlur = () => {
       popEscape();
       t.removeEventListener('blur', onBlur);
+      t.removeEventListener('keydown', onEditKeyDown);
+      t.removeEventListener('beforeinput', onEditBeforeInput);
+      t.removeEventListener('paste', onEditPaste);
+      t.removeEventListener('drop', onEditDrop);
       t.removeAttribute('contenteditable');
       if (ctx.editing === t) ctx.editing = null;
-      const after = cleanInner(t);
-      if (after !== before && !ctx.canEdit()) {
+      releaseCaretHolders();
+      const after = innerOf(t);
+      if (after !== cleanInner(t)) setInnerHtml(t, after);
+      if (after !== before && !ctx.canFinish()) {
         setInnerHtml(t, before);
       } else if (after !== before) {
-        saver.apply(() => ({ type: 'setInner', aiId: aiIdOf(t), tag: t.tagName.toLowerCase(), before, after }), {
+        saver.applyText(t, {
+          before,
+          after,
+          baseRev: startRev,
           rollback: () => setInnerHtml(t, before),
           undo: () => setInnerHtml(t, before),
           redo: () => setInnerHtml(t, after),
@@ -143,7 +320,7 @@ export function createManual(ctx) {
       window.removeEventListener('mouseup', up);
       iframe.style.pointerEvents = '';
       if (!changed) return;
-      if (!ctx.canEdit()) { setStyleAttr(img, prevStyle); return; }
+      if (!ctx.canFinish()) { setStyleAttr(img, prevStyle); return; }
       saveStyle(img, prevStyle, { width: img.style.width, height: img.style.height });
     };
     window.addEventListener('mousemove', move);
@@ -214,8 +391,83 @@ export function createManual(ctx) {
     }
     const img = doc().createElement('img');
     img.setAttribute('src', url);
-    img.setAttribute('style', 'max-width: 40%;');
-    if (insertElement(img)) select(img);
+    const slide = currentSlide();
+    if (slide === doc().body || !aiIdOf(slide)) {
+      await floatOverPage(img, slide);
+      if (insertElement(img)) select(img);
+      return;
+    }
+    const prevSlideStyle = slide.getAttribute('style');
+    const needsRelative = win().getComputedStyle(slide).position === 'static';
+    if (needsRelative) slide.style.position = 'relative';
+    await floatOverSlide(img, slide);
+    const html = img.outerHTML;
+    slide.appendChild(img);
+    let slideStyle = slide.getAttribute('style');
+    const removeImage = () => { img.remove(); if (ctx.selected === img) clearSelection(); };
+    saver.apply(() => [
+      ...(needsRelative ? [{ type: 'setStyle', aiId: aiIdOf(slide), tag: slide.tagName.toLowerCase(), props: { position: 'relative' } }] : []),
+      { type: 'insert', parentAiId: aiIdOf(slide), html },
+    ], {
+      rollback: () => { removeImage(); setStyleAttr(slide, prevSlideStyle); },
+      onResult: (results) => {
+        const insert = results[results.length - 1];
+        if (needsRelative) { slideStyle = results[0].style ?? slideStyle; setStyleAttr(slide, slideStyle); }
+        img.setAttribute('data-ai-id', insert.aiId);
+      },
+      undo: () => { removeImage(); setStyleAttr(slide, prevSlideStyle); },
+      redo: () => { setStyleAttr(slide, slideStyle); slide.appendChild(img); },
+    });
+    select(img);
+  }
+
+  function topLayer(slide) {
+    let top = 0;
+    for (const el of slide.querySelectorAll('*')) {
+      const z = parseInt(win().getComputedStyle(el).zIndex, 10);
+      if (Number.isFinite(z)) top = Math.max(top, z);
+    }
+    return Math.min(top + 1, 2147483000);
+  }
+
+  async function measure(img, host) {
+    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; visibility: hidden;');
+    host.appendChild(img);
+    try { await img.decode(); } catch { /* measure whatever loaded */ }
+    const natural = { w: img.naturalWidth || 320, h: img.naturalHeight || 180 };
+    img.remove();
+    return natural;
+  }
+
+  async function floatOverSlide(img, slide) {
+    const z = topLayer(slide);
+    const natural = await measure(img, slide);
+    const s = slide.getBoundingClientRect();
+    const cw = slide.clientWidth || s.width;
+    const ch = slide.clientHeight || s.height;
+    const width = Math.min(natural.w, cw * 0.4);
+    const height = width * (natural.h / natural.w);
+    const view = win().innerHeight;
+    const visibleTop = Math.max(s.top, 0);
+    const visibleBottom = Math.min(s.bottom, view);
+    const centreY = (visibleTop + visibleBottom) / 2 - s.top;
+    const top = Math.max(0, Math.min(ch - height, centreY - height / 2));
+    const left = (cw - width) / 2;
+    const pct = (v, of) => `${Math.round((v / of) * 10000) / 100}%`;
+    img.setAttribute('style', `position: absolute; left: ${pct(left, cw)}; top: ${pct(top, ch)}; width: ${pct(width, cw)}; z-index: ${z};`);
+  }
+
+  async function floatOverPage(img, host) {
+    const natural = await measure(img, host);
+    const view = { w: win().innerWidth, h: win().innerHeight };
+    const width = Math.min(natural.w, view.w * 0.4);
+    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; visibility: hidden; width: ' + Math.round(width) + 'px;');
+    host.appendChild(img);
+    const r = img.getBoundingClientRect();
+    const left = Math.round((view.w - r.width) / 2 - r.left);
+    const top = Math.round((view.h - r.height) / 2 - r.top);
+    img.remove();
+    img.setAttribute('style', `position: absolute; left: ${left}px; top: ${top}px; width: ${Math.round(r.width)}px; z-index: ${topLayer(host)};`);
   }
 
   function deleteSelected() {
@@ -236,5 +488,18 @@ export function createManual(ctx) {
     });
   }
 
-  return { wire, select, clearSelection, startEdit, endEditing, startResize, addText, addImage, deleteSelected };
+  function onAppPaste(e) {
+    if (ctx.editing || !ctx.canEdit()) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        e.preventDefault();
+        fileToDeck(it.getAsFile());
+        return;
+      }
+    }
+  }
+
+  return { wire, select, clearSelection, startEdit, endEditing, startResize, addText, addImage, deleteSelected, onAppPaste, innerOf };
 }

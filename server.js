@@ -8,10 +8,12 @@ import { createHub } from './src/server/hub.js';
 import { createStore } from './src/server/store.js';
 import { tildify } from './src/server/files.js';
 import { homeRoutes } from './src/server/home-routes.js';
+import { openBrowser } from './src/server/open.js';
 import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
 import { deckRoutes } from './src/server/deck-routes.js';
+import { createSample } from './src/server/sample.js';
 import { createAgents } from './src/server/agents/index.js';
 import { createRuns } from './src/server/runs.js';
 
@@ -32,6 +34,7 @@ const hubProxy = { broadcast };
 const store = createStore({ stateDir: config.stateDir });
 const notes = createNotes({ hub: hubProxy });
 const session = createDeckSession({ hub: hubProxy, store, notes, home: config.home });
+const sample = createSample({ config, store });
 const assets = createAssets({ session });
 const agents = createAgents({ config, store, broadcast });
 const runs = createRuns({ config, session, notes, agents, store, broadcast });
@@ -60,7 +63,7 @@ function stateSnapshot() {
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  ...deckRoutes({ session, notes }),
+  ...deckRoutes({ session, notes, sample }),
   ...homeRoutes({ store, config }),
   ...assets.routes,
   ...agents.routes({ isBusy: runs.isBusy }),
@@ -120,6 +123,9 @@ async function shutdown(code) {
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
+process.on('unhandledRejection', (e) => {
+  console.error('[deckhand] unhandled error:', e?.stack || e);
+});
 process.on('uncaughtException', (e) => {
   console.error('[deckhand] unexpected error:', e?.stack || e);
   shutdown(1);
@@ -137,11 +143,16 @@ try {
 
 if (config.deckPath) {
   try {
-    await session.open(config.deckPath);
+    await session.open(await sample.resolve(config.deckPath));
   } catch (e) {
     console.error(`Couldn't open ${config.deckPath}: ${e.message}`);
   }
 }
 
 await detecting;
-console.log(`\n  Deckhand is running at http://127.0.0.1:${port}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
+const url = `http://127.0.0.1:${port}`;
+const bound = session.meta();
+const landing = bound ? `${url}/edit?deck=${encodeURIComponent(bound.path)}` : url;
+console.log(`\n  Deckhand is running at ${landing}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
+
+if (config.open) openBrowser(bound ? landing : `${url}/`);

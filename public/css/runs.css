@@ -72,7 +72,7 @@
 .tone-done .activity-mark { background: var(--success); box-shadow: 0 0 0 3px var(--success-tint); }
 .tone-done .activity-state { color: var(--success); }
 .tone-error .activity-mark { background: var(--error); box-shadow: 0 0 0 3px var(--error-tint); }
-.tone-error .activity-state { color: var(--error); }
+.tone-error .activity-state { color: var(--error-ink); }
 .tone-error .activity-head { background: var(--error-tint); }
 .tone-stopped .activity-state, .tone-reverted .activity-state { color: var(--ink-2); }
 
@@ -101,7 +101,7 @@
 
 .activity-line.kind-status { color: var(--muted); }
 .activity-line.kind-blocked, .activity-line.kind-blocked .activity-glyph { color: var(--warning); }
-.activity-line.kind-error, .activity-line.kind-error .activity-glyph { color: var(--error); }
+.activity-line.kind-error, .activity-line.kind-error .activity-glyph { color: var(--error-ink); }
 .activity-line.kind-result { color: var(--ink); }
 .activity-line.kind-result .activity-glyph { color: var(--success); }
 .activity-line.kind-text {
@@ -112,8 +112,16 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  white-space: pre-wrap;
 }
+.activity-text p { margin: 0; }
+.activity-text p + p, .activity-text p + ul, .activity-text p + ol, .activity-text ul + p, .activity-text ol + p { margin-top: 6px; }
+.activity-text ul, .activity-text ol { margin: 0; padding-left: 18px; }
+.activity-text ul { list-style: disc; }
+.activity-text ol { list-style: decimal; }
+.activity-text li + li { margin-top: 2px; }
+.activity-text strong { font-weight: var(--fw-semibold); color: var(--ink); }
+.activity-text code { font-size: 0.86em; padding: 0 4px; }
+.activity-line.kind-result .activity-text p { display: inline; }
 
 .activity-error {
   flex: none;
@@ -164,3 +172,7 @@
   border-radius: var(--radius-control);
 }
 .runs-confirm { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--fs-14); line-height: var(--lh-body); }
+
+.activity-card.is-quiet .activity-lines { display: none; }
+.activity-card.is-quiet .activity-summary { border-top: 0; padding-bottom: var(--space-3); }
+.activity-ellipsis { margin-left: 1px; }

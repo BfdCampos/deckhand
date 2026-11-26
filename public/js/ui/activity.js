@@ -1,5 +1,6 @@
 import { h } from '../dom.js';
 import { icon } from './icons.js';
+import { renderMarkdown } from './markdown.js';
 import { formatElapsed } from './util.js';
 
 const KIND_ICON = {
@@ -62,6 +63,18 @@ export function createActivityCard() {
   let lastKey = null;
   let tick = null;
   let tone = 'idle';
+  let shownError = '';
+
+  const norm = (t) => String(t || '').replace(/…$/, '').trim();
+  function repeatsError(line) {
+    if ((line.kind || 'status') !== 'error' || !shownError) return false;
+    const a = norm(line.text);
+    return !!a && (a === shownError || shownError.startsWith(a) || a.startsWith(shownError));
+  }
+
+  function syncEmpty() {
+    list.hidden = !list.querySelector('.activity-line:not([hidden])');
+  }
 
   function nearBottom() {
     return list.scrollHeight - list.scrollTop - list.clientHeight < STICK_PX;
@@ -73,7 +86,16 @@ export function createActivityCard() {
     const glyph = KIND_ICON[kind] ? icon(KIND_ICON[kind], { size: 14 }) : h('span', { class: 'activity-bullet' });
     return h('li', { class: ['activity-line', `kind-${kind}`, animate && 'rise-in'] },
       kind === 'text' ? null : h('span', { class: 'activity-glyph', 'aria-hidden': 'true' }, glyph),
-      h('span', { class: 'activity-text' }, text));
+      h(kind === 'text' ? 'div' : 'span', { class: 'activity-text' }, kind === 'text' || kind === 'result' ? renderMarkdown(text) : text));
+  }
+
+  function setLive(rowEl, live) {
+    if (!rowEl) return;
+    rowEl.classList.toggle('is-live', live);
+    const kind = rowEl.lineData?.kind;
+    const dots = rowEl.querySelector('.activity-ellipsis');
+    if (live && (kind === 'write' || kind === 'edit') && !dots) rowEl.querySelector('.activity-text')?.append(h('span', { class: 'activity-ellipsis' }, '…'));
+    else if (!live) dots?.remove();
   }
 
   function add(line, animate) {
@@ -85,11 +107,14 @@ export function createActivityCard() {
     const key = kind === 'status' ? `status:${line.text}` : null;
     if (key && key === lastKey) return;
     const stick = nearBottom();
-    lastRow?.classList.remove('is-live');
+    setLive(lastRow, false);
     lastRow = row(line, animate);
     lastKey = key;
+    if (repeatsError(line)) lastRow.hidden = true;
+    lastRow.lineData = line;
     list.append(lastRow);
-    if (tone === 'working') lastRow.classList.add('is-live');
+    syncEmpty();
+    if (tone === 'working') setLive(lastRow, true);
     if (stick) list.scrollTop = list.scrollHeight;
   }
 
@@ -106,7 +131,7 @@ export function createActivityCard() {
       state.textContent = stateText ?? TONE_STATE[nextTone] ?? '';
       el.className = `activity-card tone-${nextTone}`;
       progress.hidden = nextTone !== 'working' && nextTone !== 'stopping';
-      if (lastRow) lastRow.classList.toggle('is-live', nextTone === 'working');
+      setLive(lastRow, nextTone === 'working');
     },
     setLines(lines = []) {
       list.replaceChildren();
@@ -114,6 +139,7 @@ export function createActivityCard() {
       lastRow = null;
       lastKey = null;
       for (const line of lines) add(line, false);
+      syncEmpty();
       list.scrollTop = list.scrollHeight;
     },
     append(line) {
@@ -123,9 +149,12 @@ export function createActivityCard() {
       summary.textContent = text || '';
       summary.hidden = !text;
     },
-    setError(text) {
-      errorBox.textContent = text || '';
-      errorBox.hidden = !text;
+    setError(text, { box = true } = {}) {
+      shownError = norm(text);
+      errorBox.textContent = box ? text || '' : '';
+      errorBox.hidden = !box || !text;
+      for (const r of list.querySelectorAll('.activity-line.kind-error')) r.hidden = repeatsError(r.lineData || {});
+      syncEmpty();
     },
     setActions(items = []) {
       actions.replaceChildren(...items.map((a) => h('button', {

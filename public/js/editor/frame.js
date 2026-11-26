@@ -103,8 +103,9 @@ export function restoreScroll(pos) {
 }
 
 export function parseTranslate(node) {
-  const m = /translate\(\s*(-?[\d.]+)px\s*(?:,\s*(-?[\d.]+)px)?/.exec(node.style.transform || '');
-  return m ? { x: +m[1], y: +(m[2] || 0) } : { x: 0, y: 0 };
+  const parts = (node.style.translate || '').trim().split(/\s+/).filter(Boolean);
+  const px = (v) => { const m = /^(-?[\d.]+)px$/.exec(v || '0px'); return m ? +m[1] : 0; };
+  return parts.length ? { x: px(parts[0]), y: px(parts[1]) } : { x: 0, y: 0 };
 }
 
 function stripAffordances(root) {

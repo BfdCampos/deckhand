@@ -73,6 +73,34 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? `~/${rel}` : p;
   }
 
+  const unwritable = (dir) => `Deckhand can't write to ${display(dir)}. Check its permissions.`;
+
+  async function ensureDecksDir() {
+    try {
+      await fsp.mkdir(config.decksDir, { recursive: true });
+    } catch (e) {
+      if (e.code === 'EEXIST' || e.code === 'ENOTDIR') {
+        throw new HttpError(400, 'decks_dir_not_folder', `${display(config.decksDir)} isn't a folder. Rename or move that file, then try again.`);
+      }
+      if (e.code === 'EACCES' || e.code === 'EPERM' || e.code === 'EROFS') throw new HttpError(400, 'decks_dir_unwritable', unwritable(config.decksDir));
+      throw e;
+    }
+    try {
+      await fsp.access(config.decksDir, fs.constants.W_OK);
+    } catch {
+      throw new HttpError(400, 'decks_dir_unwritable', unwritable(config.decksDir));
+    }
+  }
+
+  function finishError(run, e) {
+    if (e instanceof HttpError) return e.message;
+    if (e.code === 'EACCES' || e.code === 'EPERM' || e.code === 'EROFS') {
+      return unwritable(run.state.kind === 'create' ? config.decksDir : path.dirname(run.state.targetPath || config.decksDir));
+    }
+    log(`[deckhand] finishing the run failed: ${e.message}`);
+    return 'Something went wrong while finishing the run.';
+  }
+
   async function targetFor(description) {
     const slug = slugify(description);
     const name = uniqueDeckName(slug, (n) => fs.existsSync(path.join(config.decksDir, n)));
@@ -149,7 +177,7 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     const description = typeof body.description === 'string' ? body.description.trim() : '';
     if (!description) throw new HttpError(400, 'empty_description', 'Describe the deck you want first.');
     if (description.length > 20000) throw new HttpError(400, 'description_too_long', 'That description is too long.');
-    await fsp.mkdir(config.decksDir, { recursive: true });
+    await ensureDecksDir();
     const target = await targetFor(description);
     const name = path.basename(target);
     Object.assign(run.state, { kind: 'create', noteIds: [], label: 'New deck', description, targetPath: target });
@@ -294,7 +322,7 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
         }
       } catch (e) {
         status = 'failed';
-        error = trimError(e.message);
+        error = finishError(run, e);
       } finally {
         if (run.locked) {
           session.unlock();
@@ -482,6 +510,10 @@ export function createRuns({ config, session, notes, agents, store, broadcast = 
     'POST /api/runs/:id/revert': ({ params }) => revert(params.id),
     'GET /api/create/target': async ({ query }) => {
       const target = await targetFor(query.get('description') || '');
+      return { path: target, display: display(target) };
+    },
+    'POST /api/create/target': async ({ body }) => {
+      const target = await targetFor(typeof body.description === 'string' ? body.description : '');
       return { path: target, display: display(target) };
     },
     'GET /api/prompt': ({ query }) => promptFor(query),

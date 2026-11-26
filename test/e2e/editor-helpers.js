@@ -18,17 +18,20 @@ export async function frameGen(page) {
   return Number(await page.locator('body').getAttribute('data-ready')) || 0;
 }
 
+export async function editUrl(deckhand, query = '') {
+  const { deck } = await (await fetch(`${deckhand.url}/api/state`)).json();
+  return `${deckhand.url}/edit?deck=${encodeURIComponent(deck.path)}${query}`;
+}
+
 export async function openEditor(page, deckhand, query = '') {
-  await page.goto(deckhand.url + query);
+  await page.goto(query ? deckhand.url + query : await editUrl(deckhand));
   await expect(page.locator('body[data-ready]')).toBeAttached({ timeout: 10_000 });
   return frameGen(page);
 }
 
 export async function openDeckAt(page, deckhand, deckPath) {
   await page.goto(deckhand.url);
-  const home = page.locator('.home');
-  await expect(page.locator('.home:not([hidden]), .editor:not([hidden])').first()).toBeVisible();
-  if (!(await home.isVisible())) await page.getByRole('button', { name: '← Home' }).click();
+  await expect(page.locator('.home')).toBeVisible();
   const field = page.locator('.open-path');
   await field.fill(deckPath);
   await field.press('Enter');
@@ -59,9 +62,9 @@ export async function blurEditing(page) {
   await page.locator('.sidebar .sb-head').click();
 }
 
-export async function dragBy(page, locator, dx, dy) {
+export async function dragBy(page, locator, dx, dy, { centre = false } = {}) {
   const box = await locator.boundingBox();
-  const x = box.x + Math.min(20, box.width / 2);
+  const x = box.x + (centre ? box.width / 2 : Math.min(20, box.width / 2));
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();

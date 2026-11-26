@@ -11,6 +11,10 @@ const home = createHome({
   openDeck: (p) => openDeck(p),
   onCreateStarted: (run) => showGeneration(run.id),
   onWatchRun: (id) => showGeneration(id),
+  onContinue: () => {
+    const deck = store.get().deck;
+    if (deck) showEditor(deck, { push: true });
+  },
 });
 const generation = createGeneration({
   openDeck: (p) => openDeck(p, { push: false }),
@@ -54,6 +58,7 @@ function pauseFor(current) {
 }
 
 function showHome({ push = false, description } = {}) {
+  store.set({ justCreated: null });
   if (location.pathname !== '/' || location.search) history[push ? 'pushState' : 'replaceState'](null, '', '/');
   editor.hide();
   generation.hide();
@@ -108,7 +113,7 @@ const ROUTES = {
     const run = params.get('run');
     return run ? showGeneration(run, { push: false }) : showHome();
   },
-  '/': (params, { current, boot }) => (boot && current ? showEditor(current, { push: false }) : showHome()),
+  '/': () => showHome(),
 };
 
 async function route({ boot = false } = {}) {
@@ -118,21 +123,27 @@ async function route({ boot = false } = {}) {
 
 let lastServerId = null;
 let reconnected = false;
+let restarted = false;
 
 onEvent((m) => {
   if (m.type === 'error') { home.showError(m.error); return; }
   if (m.type === 'hello') {
     reconnected = lastServerId !== null;
+    restarted = reconnected && m.serverId !== lastServerId;
     lastServerId = m.serverId;
     return;
   }
   if (m.type !== 'deck') return;
   const deck = normaliseDeck(m.deck);
   const wasReconnect = reconnected;
+  const wasRestart = restarted;
   reconnected = false;
+  restarted = false;
   if (!deck) {
     store.set({ deck: null });
-    if (editor.visible) editor.showClosed();
+    if (!editor.visible) return;
+    if (wasRestart && !editor.paused) editor.reopen();
+    else editor.showClosed();
     return;
   }
   store.set({ deck });
@@ -140,7 +151,8 @@ onEvent((m) => {
   const shown = editor.deck;
   if (!shown || shown.path === deck.path) {
     if (!shown || shown.deckId !== deck.deckId) showEditor(deck, { push: false, slide: urlSlide() });
-    else if (wasReconnect) editor.ctx.reload('tab');
+    else if (wasReconnect) editor.reconnected();
+    else editor.updateMeta(deck);
     return;
   }
   if (deck.path === pendingOpen) return;

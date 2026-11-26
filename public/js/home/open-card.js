@@ -20,6 +20,8 @@ export function createOpenCard({ openDeck, getInfo }) {
   const errorText = h('span', null);
   const error = h('p', { class: 'field-error open-error', role: 'alert', hidden: true }, icon('alert-circle', { size: 14 }), errorText);
   const browseBtn = h('button', { type: 'button', class: 'btn btn-ghost open-browse' }, icon('folder-open'), 'Browse…');
+  const busyNote = h('p', { class: 'open-busy t-small', role: 'status', hidden: true });
+  const sampleBtn = h('button', { type: 'button', class: 'link recents-sample', hidden: true, onclick: () => open(getInfo()?.sampleDeck) }, icon('play', { size: 12 }), 'Try the sample deck');
 
   const el = h('section', { class: 'card-lg home-card home-open', 'aria-labelledby': 'open-title' },
     h('header', { class: 'home-card-head' },
@@ -29,11 +31,25 @@ export function createOpenCard({ openDeck, getInfo }) {
       h('span', { class: 't-label' }, 'Recent'),
       list),
     h('div', { class: 'open-actions' },
+      busyNote,
       h('div', { class: 'input-group' }, pathInput, openBtn),
       error,
-      browseBtn));
+      h('div', { class: 'open-foot' }, browseBtn, sampleBtn)));
 
   let busy = false;
+  let blocked = null;
+
+  function setBusy(text) {
+    blocked = text || null;
+    busyNote.textContent = blocked || '';
+    busyNote.hidden = !blocked;
+    pathInput.disabled = !!blocked;
+    openBtn.disabled = !!blocked;
+    browseBtn.disabled = !!blocked;
+    sampleBtn.disabled = !!blocked;
+    el.classList.toggle('is-busy', !!blocked);
+    for (const b of list.querySelectorAll('.recent-open')) b.disabled = !!blocked;
+  }
 
   function showError(err) {
     const text = !err ? '' : typeof err === 'string' ? err : openErrorText(err);
@@ -45,6 +61,7 @@ export function createOpenCard({ openDeck, getInfo }) {
 
   async function open(p) {
     const target = (p || '').trim();
+    if (blocked) return;
     if (!target || busy) { if (!target) showError({ code: 'not_found' }); return; }
     busy = true;
     showError('');
@@ -99,15 +116,15 @@ export function createOpenCard({ openDeck, getInfo }) {
   }
 
   function render(items) {
+    sampleBtn.hidden = !getInfo()?.sampleDeck;
     const shown = items.slice(0, SHOWN);
     if (shown.length) {
       list.replaceChildren(...shown.map(row));
+      setBusy(blocked);
       return;
     }
-    const sample = getInfo()?.sampleDeck;
     list.replaceChildren(h('li', { class: 'recents-empty' },
-      h('p', null, 'Decks you open or create will show up here.'),
-      sample ? h('button', { type: 'button', class: 'link recents-sample', onclick: () => open(sample) }, icon('play', { size: 12 }), 'Try the sample deck') : null));
+      h('p', null, 'Decks you open or create will show up here.')));
   }
 
   async function load() {
@@ -119,5 +136,5 @@ export function createOpenCard({ openDeck, getInfo }) {
     }
   }
 
-  return { el, load, showError, focusPath: () => pathInput.focus() };
+  return { el, load, showError, setBusy, focusPath: () => pathInput.focus() };
 }

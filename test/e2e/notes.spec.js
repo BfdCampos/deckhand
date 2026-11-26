@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures.js';
+import { test, expect, SERVER_RESTART_NOISE } from './fixtures.js';
 import { deckFrame, readDisk, sidecar, openEditor, diskEventually } from './editor-helpers.js';
 
 test.use({ deckhandOptions: { deck: 'test/fixtures/decks/basic.html' } });
@@ -94,19 +94,41 @@ test('AC-42 notes edit inline from the sidebar and the pin, and delete cleanly',
   await expect(page.locator('.notes-empty')).toHaveText('No notes yet. Right-click anything on a slide to tell the AI what to change.');
 });
 
-test('AC-43 notes and pins survive a refresh and a server restart', async ({ page, deckhand }) => {
+test.describe('server restart', () => {
+  test.use({ allowedConsoleErrors: [SERVER_RESTART_NOISE] });
+
+  test('AC-43 notes and pins survive a refresh and a server restart', async ({ page, deckhand }) => {
+    await openEditor(page, deckhand);
+    await addNote(page, deckFrame(page).locator('h1'), 'Keep me');
+    await expect.poll(async () => (await json(deckhand)).notes.length).toBe(1);
+
+    await page.reload();
+    await expect(page.locator('body[data-ready]')).toBeAttached();
+    await expect(page.locator('.note-item')).toContainText('Keep me');
+    await expect(page.locator('.pin')).toHaveCount(1);
+
+    await deckhand.restart();
+    await page.reload();
+    await expect(page.locator('body[data-ready]')).toBeAttached();
+    await expect(page.locator('.note-item')).toContainText('Keep me');
+    await expect(page.locator('.pin')).toHaveCount(1);
+  });
+});
+
+test('the note popover names its target in plain words', async ({ page, deckhand }) => {
   await openEditor(page, deckhand);
-  await addNote(page, deckFrame(page).locator('h1'), 'Keep me');
-  await expect.poll(async () => (await json(deckhand)).notes.length).toBe(1);
-
-  await page.reload();
-  await expect(page.locator('body[data-ready]')).toBeAttached();
-  await expect(page.locator('.note-item')).toContainText('Keep me');
-  await expect(page.locator('.pin')).toHaveCount(1);
-
-  await deckhand.restart();
-  await page.reload();
-  await expect(page.locator('body[data-ready]')).toBeAttached();
-  await expect(page.locator('.note-item')).toContainText('Keep me');
-  await expect(page.locator('.pin')).toHaveCount(1);
+  const frame = deckFrame(page);
+  const pop = page.locator('.note-pop');
+  const targetOf = async (locator, options) => {
+    await locator.scrollIntoViewIfNeeded();
+    await locator.click({ button: 'right', ...options });
+    const text = await pop.locator('.note-pop-target').innerText();
+    await page.keyboard.press('Escape');
+    await expect(pop).toHaveCount(0);
+    return text;
+  };
+  expect(await targetOf(frame.locator('h2', { hasText: 'Things to say' }))).toBe("On heading: 'Things to say'");
+  expect(await targetOf(frame.locator('li', { hasText: 'First thing' }))).toBe("On list item: 'First thing'");
+  expect(await targetOf(frame.locator('p', { hasText: 'The first slide.' }))).toBe("On paragraph: 'The first slide.'");
+  expect(await targetOf(frame.locator('section').nth(2), { position: { x: 20, y: 400 } })).toBe('On slide 3');
 });

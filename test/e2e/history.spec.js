@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from './fixtures.js';
+import { editUrl } from './editor-helpers.js';
 
 test.use({ deckhandOptions: { deck: 'test/fixtures/decks/basic.html' } });
 
@@ -9,7 +10,7 @@ test('deck reloads never add history entries, so Back returns to the app and not
   const src = '<!DOCTYPE html><html><head><title>Other</title></head><body><section class="slide"><h1>Other v0</h1></section></body></html>';
   fs.writeFileSync(other, src);
 
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await expect(page.locator('.topbar-name')).toHaveText('basic.html');
   await page.getByRole('button', { name: '← Home' }).click();
   await page.getByRole('textbox', { name: 'Deck path' }).fill(other);

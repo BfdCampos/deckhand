@@ -12,7 +12,12 @@ import { pidAlive, waitFor } from '../helpers/util.js';
 
 after(removeTempDirs);
 const live = [];
-after(async () => { for (const r of live) await r.stopAll().catch(() => {}); });
+after(async () => {
+  for (const { runs, session } of live) {
+    await runs.stopAll().catch(() => {});
+    await session.dispose().catch(() => {});
+  }
+});
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"></svg>';
 
@@ -44,7 +49,7 @@ async function setup({ agents = ['claude'], deck = 'basic.html', notes = ['Make 
   const runs = createRuns({
     config: { decksDir, home }, session, notes: notesMod, agents: agentsMod, store, broadcast: hub.broadcast, env: fullEnv, tmpDir: tmp, log: () => {},
   });
-  live.push(runs);
+  live.push({ runs, session });
   await session.open(deckPath);
   for (const text of notes) await notesMod.apply({ op: 'add', note: { text, aiId: 'dh1', targetTag: 'h1', slide: 1 } });
   const meta = session.meta();
@@ -79,14 +84,14 @@ describe('create runs', () => {
     const run = await t.runs.start(CREATE('A deck about tea'));
     assert.equal(run.kind, 'create');
     assert.equal(run.status, 'running');
-    assert.equal(run.targetPath, path.join(t.decksDir, 'deck-tea.html'));
+    assert.equal(run.targetPath, path.join(t.decksDir, 'tea.html'));
     const done = await finished(t.runs);
     assert.equal(done.status, 'succeeded', done.error);
     const [entry] = t.log();
     assert.match(path.basename(entry.cwd), /^deckhand-run-/);
     assert.ok(fs.realpathSync(path.dirname(entry.cwd)) === fs.realpathSync(t.tmp));
     assert.match(entry.stdin, /^You're creating a new slide deck for Deckhand/);
-    assert.match(entry.stdin, /Write exactly one file, `deck-tea\.html`/);
+    assert.match(entry.stdin, /Write exactly one file, `tea\.html`/);
     assert.match(entry.stdin, /\n\nA deck about tea$/);
     assert.ok(fs.existsSync(done.targetPath));
     assert.equal(t.session.meta().path, fs.realpathSync(done.targetPath));
@@ -97,9 +102,9 @@ describe('create runs', () => {
   test('an existing name gets -2', async () => {
     const t = await setup({ notes: [] });
     fs.mkdirSync(t.decksDir, { recursive: true });
-    fs.writeFileSync(path.join(t.decksDir, 'deck-tea.html'), 'x');
+    fs.writeFileSync(path.join(t.decksDir, 'tea.html'), 'x');
     const run = await t.runs.start(CREATE('A deck about tea'));
-    assert.equal(path.basename(run.targetPath), 'deck-tea-2.html');
+    assert.equal(path.basename(run.targetPath), 'tea-2.html');
     await finished(t.runs);
   });
 
@@ -158,7 +163,7 @@ describe('create runs', () => {
     assert.equal(reverted.canRevert, false);
     assert.equal(fs.existsSync(run.targetPath), false);
     assert.equal(t.session.meta(), null);
-    assert.ok(!t.store.get().recents.some((r) => r.path.endsWith('deck-tea.html')));
+    assert.ok(!t.store.get().recents.some((r) => r.path.endsWith('tea.html')));
   });
 
   test('an empty description is refused', async () => {
@@ -406,7 +411,7 @@ describe('edit runs', () => {
     const done = await finished(t.runs);
     const { activity } = t.runs.current();
     assert.equal(done.id, run.id);
-    assert.deepEqual(activity.map((l) => l.kind), ['status', 'read', 'blocked', 'blocked', 'edit', 'text', 'result']);
+    assert.deepEqual(activity.map((l) => l.kind), ['status', 'read', 'blocked', 'blocked', 'edit', 'text']);
     assert.deepEqual(activity.map((l) => l.seq), activity.map((_, i) => i + 1));
     assert.ok(activity.every((l) => typeof l.ts === 'string'));
     const live = t.events.filter((e) => e.type === 'run-activity');

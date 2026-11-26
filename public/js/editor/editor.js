@@ -4,7 +4,8 @@ import { store } from '../store.js';
 import { icon } from '../ui/icons.js';
 import { toast, setToastHost } from '../ui/toast.js';
 import { attachEscape, pushEscape } from '../ui/escape.js';
-import { bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
+import { openModal } from '../ui/modal.js';
+import { aiIdOf, setInnerHtml, bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
 import { createSaver } from './saver.js';
 import { createManual } from './manual.js';
 import { mountOverlay } from './overlay.js';
@@ -16,6 +17,7 @@ const CONN_LABEL = { connecting: 'Connecting…', live: 'Live', reconnecting: 'R
 const CONN_DOT = { connecting: 'dot', live: 'dot dot-success', reconnecting: 'dot dot-warning' };
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const HINT_KEY = 'deckhand.hintDismissed';
+const READ_ONLY_BANNER = { tone: 'warning', icon: 'warning', text: "This file is read-only. You can browse it and copy prompts, but edits won't save." };
 
 export function createEditor({ onHome }) {
   let iframe = h('iframe', { id: 'deck', title: 'Deck' });
@@ -40,7 +42,7 @@ export function createEditor({ onHome }) {
     footer: h('div', { class: 'sb-foot' }),
   };
 
-  const state = { missing: false, closed: false, pendingScroll: null, pendingRev: 0, reloadWanted: null, reloadScheduled: false };
+  const state = { offline: false, missing: false, closed: false, pendingScroll: null, pendingRev: 0, reloadWanted: null, reloadScheduled: false };
 
   const ctx = {
     iframe,
@@ -56,12 +58,14 @@ export function createEditor({ onHome }) {
     selected: null,
     editing: null,
     locked: false,
-    canEdit: () => !!ctx.deck && !ctx.locked && !ctx.deck.readOnly && !state.missing && !state.closed,
+    canFinish: () => !!ctx.deck && !ctx.locked && !state.missing && !state.closed,
+    canEdit: () => ctx.canFinish() && !ctx.deck.readOnly && !state.offline,
     canChangeNotes: () => ctx.canEdit(),
     reload,
     editEnded,
     showMissing,
     showClosed,
+    showReadOnly,
     setLocked,
     flushSaves,
     goHome,
@@ -73,7 +77,8 @@ export function createEditor({ onHome }) {
   const homeButton = h('button', { type: 'button', class: 'btn btn-ghost btn-sm topbar-home', onclick: goHome }, '← Home');
   const topbar = h('header', { class: 'topbar' },
     homeButton,
-    deckName,
+    h('span', { class: 'topbar-sep', 'aria-hidden': 'true' }),
+    h('span', { class: 'topbar-deck' }, icon('deck', { size: 14 }), deckName),
     h('span', { class: 'grow' }),
     saver.el,
     slots.agent,
@@ -99,6 +104,31 @@ export function createEditor({ onHome }) {
 
   bindFrame(iframe);
   ctx.manual = createManual(ctx);
+  ctx.innerOf = (el) => ctx.manual.innerOf(el);
+  ctx.setInner = setInnerHtml;
+  ctx.onAllSaved = () => { if (state.reloadWanted && !ctx.editing) reload('tab'); };
+  ctx.onConflicts = (n) => setBanner('conflict', n ? {
+    tone: 'warning',
+    icon: 'warning',
+    text: n === 1
+      ? 'This text changed in another tab or on disk while you were editing it.'
+      : `${n} of your edits changed in another tab or on disk while you were editing them.`,
+    actions: [
+      { label: 'Keep mine', icon: 'check', onClick: () => saver.keepMine() },
+      { label: 'Use theirs', icon: 'refresh', onClick: () => saver.useTheirs() },
+    ],
+  } : null);
+  ctx.serverInnerOf = async (el) => {
+    const aiId = aiIdOf(el);
+    if (!aiId || !ctx.deck) return null;
+    const [source, live] = await Promise.all([
+      fetch(`${ctx.deck.url}${ctx.deck.url.includes('?') ? '&' : '?'}t=${Date.now()}`).then((r) => (r.ok ? r.text() : null)),
+      api.get('/api/state'),
+    ]);
+    if (!source || live.deck?.deckId !== ctx.deck.deckId) return null;
+    const node = new DOMParser().parseFromString(source, 'text/html').querySelector(`[data-ai-id="${CSS.escape(aiId)}"]`);
+    return node ? { inner: node.innerHTML, rev: live.deck.rev } : null;
+  };
   ctx.notesApi = mountNotes(ctx);
   ctx.dock = createDock(ctx);
   ctx.runs = mountRuns(ctx);
@@ -125,7 +155,20 @@ export function createEditor({ onHome }) {
     root.classList.toggle('is-readonly', !!ctx.deck?.readOnly);
   }
 
-  const showConn = (s) => { connLabel.textContent = CONN_LABEL[s.conn] || ''; connDot.className = CONN_DOT[s.conn] || 'dot'; };
+  const showConn = (s) => {
+    connLabel.textContent = CONN_LABEL[s.conn] || '';
+    connDot.className = CONN_DOT[s.conn] || 'dot';
+    const offline = s.conn === 'reconnecting';
+    if (offline === state.offline) return;
+    state.offline = offline;
+    if (offline) {
+      ctx.selected = null;
+      ctx.notesApi.closePopovers();
+    }
+    setBanner('offline', offline ? { tone: 'info', icon: 'loader', text: 'Lost connection to Deckhand. Trying again…', spin: true } : null);
+    syncControls();
+    ctx.notesApi.render();
+  };
   store.subscribe(showConn);
   showConn(store.get());
 
@@ -182,11 +225,12 @@ export function createEditor({ onHome }) {
 
   function showElsewhere(deck, { onSwitch, onHome }) {
     state.closed = true;
+    state.elsewhere = true;
     ctx.manual.endEditing();
     ctx.selected = null;
     ctx.notesApi.closePopovers();
     elsewhereText.textContent = `Another tab opened ${deck.name || deck.path.split('/').pop()}.`;
-    switchButton.onclick = onSwitch;
+    switchButton.onclick = () => confirmLeave(onSwitch);
     elsewhereHome.onclick = onHome;
     setPaused(true);
     syncControls();
@@ -212,6 +256,11 @@ export function createEditor({ onHome }) {
     pillText.textContent = message || 'Your agent is editing your deck…';
     veil.hidden = !ctx.locked;
     syncControls();
+    if (ctx.locked) {
+      const pillBox = veil.querySelector('.editor-pill').getBoundingClientRect();
+      const stageBox = stage.getBoundingClientRect();
+      if (pillBox.height) stage.style.setProperty('--toast-top', `${Math.ceil(pillBox.bottom - stageBox.top + 8)}px`);
+    }
     ctx.notesApi.render();
   }
 
@@ -220,10 +269,24 @@ export function createEditor({ onHome }) {
     await saver.flush();
   }
 
+  function confirmLeave(then) {
+    if (!saver.hasUnsaved()) { then(); return; }
+    openModal({
+      title: 'Leave without saving?',
+      width: 440,
+      body: h('p', { class: 't-small text-muted' }, "You have changes that haven't saved. Leave anyway? They'll be lost."),
+      actions: [
+        { label: 'Keep editing', primary: true, onClick: ({ close }) => close() },
+        { label: 'Leave without saving', danger: true, onClick: ({ close }) => { close(); saver.reset(); then(); } },
+      ],
+    });
+  }
+
   async function goHome() {
     try { await flushSaves(); } catch { /* go home anyway */ }
-    onHome();
+    confirmLeave(onHome);
   }
+
 
   function loadFrame(scroll) {
     state.pendingScroll = scroll;
@@ -240,15 +303,16 @@ export function createEditor({ onHome }) {
     const wanted = state.reloadWanted || { toast: false, clear: false };
     if (reason === 'external') wanted.toast = true;
     if (reason !== 'tab') wanted.clear = true;
+    if (reason === 'agent' || reason === 'revert' || ctx.locked) wanted.quiet = true;
     state.reloadWanted = wanted;
     if (ctx.editing || state.reloadScheduled) return;
     state.reloadScheduled = true;
     saver.flush().then(() => {
       state.reloadScheduled = false;
-      if (ctx.editing || !state.reloadWanted || !ctx.deck) return;
+      if (ctx.editing || !state.reloadWanted || !ctx.deck || saver.hasUnsaved()) return;
       const why = state.reloadWanted;
       state.reloadWanted = null;
-      if (why.clear && saver.clearHistory()) toast('Undo history cleared');
+      if (why.clear && saver.clearHistory() && !why.quiet) toast('Undo history cleared');
       if (why.toast) toast('Updated from disk');
       loadFrame(captureScroll());
     });
@@ -290,6 +354,7 @@ export function createEditor({ onHome }) {
     const t = e.target;
     if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"], .dialog-scrim, .popover')) return;
     if (document.querySelector('.dialog-scrim')) return;
+    if (t && t.ownerDocument === document && t !== document.body && t !== iframe) return;
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
     if (mod && key === 'z') {
@@ -306,6 +371,17 @@ export function createEditor({ onHome }) {
     }
   }
   document.addEventListener('keydown', onKey);
+  window.addEventListener('beforeunload', (e) => {
+    if (root.hidden || !saver.hasUnsaved()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+  document.addEventListener('paste', (e) => {
+    if (root.hidden || document.querySelector('.dialog-scrim')) return;
+    const t = document.activeElement;
+    if (t && t !== document.body && t !== iframe && t.closest('input, textarea, select, [contenteditable="true"], .popover')) return;
+    ctx.manual.onAppPaste(e);
+  });
 
   pushEscape(() => {
     if (root.hidden || !ctx.selected) return false;
@@ -346,9 +422,47 @@ export function createEditor({ onHome }) {
     bindFrame(next);
   }
 
+  function updateMeta(deck) {
+    const wasReadOnly = !!ctx.deck?.readOnly;
+    ctx.deck = { ...ctx.deck, ...deck };
+    store.set({ deck: ctx.deck });
+    setBanner('readonly', ctx.deck.readOnly ? READ_ONLY_BANNER : null);
+    syncControls();
+    ctx.notesApi.render();
+    if (wasReadOnly && !ctx.deck.readOnly && saver.hasUnsaved()) saver.retry();
+  }
+
+  function showReadOnly() {
+    if (ctx.deck) ctx.deck = { ...ctx.deck, readOnly: true };
+    setBanner('readonly', READ_ONLY_BANNER);
+    syncControls();
+  }
+
+  function reattach(deck) {
+    ctx.deck = deck;
+    ctx.rev = deck.rev ?? 0;
+    state.pendingRev = 0;
+    state.missing = !!deck.missing;
+    state.closed = false;
+    state.elsewhere = false;
+    setPaused(false);
+    saver.clearHistory();
+    store.set({ deck });
+    for (const key of ['closed', 'missing']) setBanner(key, null);
+    syncControls();
+    ctx.notesApi.load();
+    state.reloadWanted = { toast: false, clear: true };
+    saver.retry();
+  }
+
   function open(deck, { slide, paused } = {}) {
     ctx.manual.endEditing();
+    if (!paused && ctx.deck && ctx.deck.path === deck.path && !root.hidden && saver.hasUnsaved()) {
+      reattach(deck);
+      return;
+    }
     if (ctx.deck) freshFrame();
+    state.elsewhere = false;
     ctx.deck = deck;
     ctx.rev = deck.rev ?? 0;
     state.pendingRev = 0;
@@ -357,12 +471,14 @@ export function createEditor({ onHome }) {
     state.reloadWanted = null;
     setPaused(false);
     saver.clearHistory();
+    saver.reset();
     store.set({ deck });
     deckName.textContent = deck.name;
     deckName.title = deck.path;
     document.title = `${deck.name} · Deckhand`;
     bannerMap.clear();
-    setBanner('readonly', deck.readOnly ? { tone: 'warning', icon: 'warning', text: "This file is read-only. You can browse it and copy prompts, but edits won't save." } : null);
+    if (state.offline) bannerMap.set('offline', { tone: 'info', icon: 'loader', text: 'Lost connection to Deckhand. Trying again…' });
+    setBanner('readonly', deck.readOnly ? READ_ONLY_BANNER : null);
     if (state.missing) showMissing();
     syncControls();
     root.hidden = false;
@@ -381,7 +497,14 @@ export function createEditor({ onHome }) {
     stage,
     get visible() { return !root.hidden; },
     get deck() { return ctx.deck; },
+    get paused() { return !!state.elsewhere; },
     open,
+    reopen,
+    updateMeta,
+    reconnected() {
+      if (saver.hasUnsaved()) saver.retry();
+      else reload('tab');
+    },
     showClosed,
     showElsewhere,
     hide() {

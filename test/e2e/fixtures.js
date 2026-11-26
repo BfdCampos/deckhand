@@ -4,7 +4,17 @@ import { startDeckhand } from '../helpers/deckhand.js';
 // Playwright's trace snapshotter is refused inside sandboxed srcdoc frames (dock
 // thumbnails), and Chrome logs that refusal. It only happens while tracing.
 const HARNESS_NOISE = /^Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed/;
+// Playwright reads `[a, b]` as a `[value, options]` pair when b is an object (a RegExp counts),
+// so pass two or more entries wrapped once: `allowedConsoleErrors: [[/a/, /b/]]`. A bare value works too.
+const asList = (value) => [value ?? []].flat(Infinity).filter((v) => v !== undefined && v !== null);
+
 const isHarnessNoise = (msg) => HARNESS_NOISE.test(msg.text()) && msg.location().url === 'about:srcdoc';
+
+// Chrome's own console lines while a test deliberately stops or restarts the server.
+export const SERVER_RESTART_NOISE = [
+  /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/ws' failed: /,
+  /^Failed to load resource: net::ERR_CONNECTION_REFUSED$/,
+];
 
 export const test = base.extend({
   deckhandOptions: [{}, { option: true }],
@@ -27,8 +37,10 @@ export const test = base.extend({
     }
   },
 
-  failOnConsoleErrors: [async ({ context, allowedConsoleErrors, expectedApiErrors }, use) => {
+  failOnConsoleErrors: [async ({ context, allowedConsoleErrors: allowedOption, expectedApiErrors: expectedOption }, use) => {
     const problems = [];
+    const allowedConsoleErrors = asList(allowedOption);
+    const expectedApiErrors = asList(expectedOption);
     const expectedApi = (msg) => {
       const m = /^Failed to load resource: the server responded with a status of (\d{3})/.exec(msg.text());
       if (!m) return false;

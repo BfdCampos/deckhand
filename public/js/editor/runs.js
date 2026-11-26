@@ -135,16 +135,25 @@ export function mountRuns(ctx) {
     card.setTimer(run.startedAt, run.endedAt);
 
     let summary = null;
-    if (run.reverted) summary = 'Reverted. The deck and notes are back how they were before this run.';
+    if (run.reverted) summary = run.kind === 'create' ? 'Deleted. The deck is gone and your description is back on Home.' : 'Reverted. The deck and notes are back how they were before this run.';
     else if (run.status === 'succeeded') {
-      if (run.summary && typeof run.summary.total === 'number') summary = `Applied ${run.summary.applied} of ${plural(run.summary.total, 'note', 'notes')}.`;
+      if (run.kind === 'create') summary = 'Deck created.';
+      else if (run.summary && typeof run.summary.total === 'number') summary = `Applied ${run.summary.applied} of ${plural(run.summary.total, 'note', 'notes')}.`;
       else summary = run.kind === 'create' ? 'Deck created.' : 'Done.';
     } else if (run.status === 'stopped') summary = 'Stopped. Any edits it already made are still in the file.';
     card.setSummary(summary);
     card.setError(run.status === 'failed' ? trimError(run.error || 'The agent stopped without saying why.') : null);
 
+    const inUse = (ctx.notes || []).length > 0;
+    const quiet = run.kind === 'create' && run.status === 'succeeded' && !run.reverted && (inUse || store.get().justCreated !== run.id);
+    card.el.classList.toggle('is-quiet', quiet);
     const actions = [];
-    if (run.status !== 'running' && run.canRevert && !run.reverted) actions.push({ label: 'Revert changes', icon: 'undo', onClick: confirmRevert });
+    if (quiet) { card.setActions(actions); return; }
+    if (run.status !== 'running' && run.canRevert && !run.reverted) {
+      actions.push(run.kind === 'create'
+        ? { label: 'Delete this deck', icon: 'trash', onClick: confirmRevert }
+        : { label: 'Revert changes', icon: 'undo', onClick: confirmRevert });
+    }
     if (run.status === 'failed') actions.push({ label: 'Copy prompt', icon: 'copy', onClick: () => copyPrompt({}) });
     card.setActions(actions);
   }
@@ -204,8 +213,17 @@ export function mountRuns(ctx) {
     return note && (note.status || 'open') !== 'done' ? 'Still open' : null;
   }
 
+  function settleCreate() {
+    if (!store.get().justCreated) return;
+    store.set({ justCreated: null });
+    renderCard();
+  }
+  onEvent((m) => { if (m.type === 'deck-changed' && m.source === 'tab') settleCreate(); });
+
   let queued = false;
   ctx.notesChanged = () => {
+    if ((ctx.notes || []).length) settleCreate();
+    if (run?.kind === 'create') renderCard();
     if (queued) return;
     queued = true;
     queueMicrotask(() => {
@@ -229,9 +247,9 @@ export function mountRuns(ctx) {
   function applyRun(given, { activity } = {}) {
     const next = given && revertedIds.has(given.id) ? { ...given, reverted: true, canRevert: false } : given;
     store.set({ run: next || null });
-    if (!next || !isOurs(next)) {
-      busyOther = !!next && next.status === 'running' && !isOurs(next);
-      if (run && next && run.id === next.id) run = null;
+    const ours = !!next && (isOurs(next) || (run?.id === next.id && run.kind === next.kind));
+    if (!ours) {
+      busyOther = !!next && next.status === 'running';
       if (!run) lock(false);
       renderFooter();
       return;
@@ -245,8 +263,9 @@ export function mountRuns(ctx) {
       startNotes = openNotes().map((n) => n.id);
       mergeLines(activity || []);
       card.setLines(sortedLines());
-    } else if (activity && mergeLines(activity)) {
-      card.setLines(sortedLines());
+    } else if (activity) {
+      const before = lines.size;
+      if (mergeLines(activity) || lines.size !== before) card.setLines(sortedLines());
     }
     const regressed = !fresh && run.status !== 'running' && next.status === 'running';
     run = regressed ? { ...next, status: run.status, endedAt: run.endedAt, error: run.error, summary: run.summary, canRevert: run.canRevert } : next;
@@ -337,12 +356,14 @@ export function mountRuns(ctx) {
         : `Deckhand will put ${deckName} and its notes back exactly as they were before ${who} started.`),
       h('p', { class: 'text-muted' }, target.kind === 'create' ? "You can't undo this." : "Any edits made since the run finished will be lost too. You can't undo this."));
     openModal({
-      title: 'Revert this run?',
+      title: target.kind === 'create' ? 'Delete this deck?' : 'Revert this run?',
       body,
       width: 440,
       actions: [
         { label: 'Cancel' },
-        { label: 'Revert changes', danger: true, icon: 'undo', onClick: ({ close }) => { close(); revert(target); } },
+        target.kind === 'create'
+          ? { label: 'Delete this deck', danger: true, icon: 'trash', onClick: ({ close }) => { close(); revert(target); } }
+          : { label: 'Revert changes', danger: true, icon: 'undo', onClick: ({ close }) => { close(); revert(target); } },
       ],
     });
   }
@@ -352,7 +373,8 @@ export function mountRuns(ctx) {
       const next = await api.post(`/api/runs/${encodeURIComponent(target.id)}/revert`, {});
       revertedIds.add(target.id);
       applyRun(next);
-      toast('Reverted. The deck is back how it was before the run.', { tone: 'success' });
+      const name = currentDeck()?.name || 'the deck';
+      toast(target.kind === 'create' ? `Deleted ${name}. Your description is back on Home.` : 'Reverted. The deck is back how it was before the run.', { tone: 'success' });
       if (target.kind === 'create') {
         if (target.description) localStorage.setItem('deckhand.draft', target.description);
         ctx.goHome();
@@ -429,6 +451,7 @@ export function mountRuns(ctx) {
   });
 
   store.subscribe((s, patch) => {
+    if ('justCreated' in patch && !s.justCreated && run?.kind === 'create') renderCard();
     if ('agents' in patch) { renderFooter(); if (ourRunning()) lock(true); }
     if ('deck' in patch && s.deck?.path !== deckPath) {
       deckPath = s.deck?.path || null;

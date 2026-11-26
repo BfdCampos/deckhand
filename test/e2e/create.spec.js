@@ -15,7 +15,7 @@ async function startCreate(page, deckhand, description) {
   await openHome(page, deckhand);
   await input(page).fill(description);
   await page.locator('.create-submit').click();
-  await expect(gen(page)).toBeVisible();
+  await expect(page.locator('.generation:not([hidden]), .editor:not([hidden])').first()).toBeVisible();
 }
 
 test('AC-13 Create deck sends the build contract and description to the agent, staged', async ({ page, deckhand }) => {
@@ -88,6 +88,16 @@ test.describe('failures', () => {
     await gen(page).getByRole('button', { name: 'Edit description' }).click();
     await expect(page.locator('.home')).toBeVisible();
     await expect(input(page)).toHaveValue(description);
+  });
+
+  test('an instant failure stays on the generation screen', async ({ page, deckhand }) => {
+    const description = withScenario('fail');
+    await startCreate(page, deckhand, description);
+    await expect(gen(page).getByRole('heading', { name: "That didn't work" })).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(300);
+    await expect(gen(page)).toBeVisible();
+    await expect(page.locator('.home')).toBeHidden();
+    await expect(page).toHaveURL(/\/create\?run=/);
   });
 
   test('AC-17 finishing without a file says so', async ({ page, deckhand }) => {

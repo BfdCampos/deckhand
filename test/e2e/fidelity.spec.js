@@ -67,8 +67,8 @@ test('AC-27 moving an element keeps its other style declarations byte for byte',
   await openDeckAt(page, deckhand, file);
   const styled = deckFrame(page).locator('p', { hasText: 'Styled text' });
   await dragBy(page, styled, 40, 0);
-  await diskEventually(file, (s) => /style="color:#FFF;margin:0; transform: translate\(40px, 0px\);"/.test(s));
-  expect(stripAnchors(await readDisk(file)).replace('; transform: translate(40px, 0px);', '')).toBe(AWKWARD);
+  await diskEventually(file, (s) => /style="color:#FFF;margin:0; translate: 40px 0px;"/.test(s));
+  expect(stripAnchors(await readDisk(file)).replace('; translate: 40px 0px;', '')).toBe(AWKWARD);
 });
 
 test.describe('script-owned text', () => {

@@ -110,7 +110,7 @@ test.describe('while an agent is working', () => {
   test('a create run makes the hand-off button read Busy with another run', async ({ page, deckhand }) => {
     await addNotes(deckhand, THREE);
     await openEditor(page, deckhand);
-    const run = await postApi(deckhand, '/api/runs', { kind: 'create', description: 'A deck about busy tests' });
+    const run = await postApi(deckhand, '/api/runs', { kind: 'create', description: 'A deck about busy tests [[fake:hang]]' });
     await expect(handoff(page)).toBeDisabled();
     await expect(handoff(page)).toContainText('Busy with another run');
     await expect(page.locator('.editor-pill')).toBeHidden();
@@ -122,14 +122,14 @@ test.describe('while an agent is working', () => {
 test.describe('blocked tools', () => {
   test.use({ deckhandOptions: { deck: BASIC, agents: ['claude'], scenario: 'blocked' } });
 
-  test('AC-47 activity reads start, read, blocked, edit, agent text and result in order', async ({ page, deckhand }) => {
+  test('AC-47 activity reads start, read, blocked, edit and agent text in order, without repeating the last line', async ({ page, deckhand }) => {
     await addNotes(deckhand, THREE);
     await openEditor(page, deckhand);
     await handoff(page).click();
     await expect(card(page).locator('.activity-state')).toHaveText('Done');
     const kinds = await card(page).locator('.activity-line').evaluateAll((els) => els.map((e) => [...e.classList].find((c) => c.startsWith('kind-')).slice(5)));
     const order = kinds.filter((k, i) => k !== kinds[i - 1]);
-    expect(order).toEqual(['status', 'read', 'blocked', 'edit', 'text', 'result']);
+    expect(order).toEqual(['status', 'read', 'blocked', 'edit', 'text']);
     const lines = card(page).locator('.activity-line');
     await expect(lines.filter({ hasText: 'Blocked: Bash' })).toHaveCount(1);
     await expect(lines.filter({ hasText: 'Blocked: Read' })).toHaveCount(1);

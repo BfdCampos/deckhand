@@ -22,16 +22,22 @@ test('AC-30 "+ Image" uploads, inserts on the current slide, selects and saves',
   const img = deckFrame(page).locator('section').first().locator('img');
   await expect(img).toBeVisible();
   await expect(page.locator('.handle').first()).toBeVisible();
-  await diskEventually(deckhand.deckPath, (s) => /<img data-ai-id="dh\d+" src="deckhand-assets\/[^"]*logo[^"]*\.png" style="max-width: 40%;">/.test(s));
+  await diskEventually(deckhand.deckPath, (s) => /<img data-ai-id="dh\d+" src="deckhand-assets\/[^"]*logo[^"]*\.png" style="position: absolute; left: [\d.]+%; top: [\d.]+%; width: [\d.]+%; z-index: \d+;">/.test(s));
   const files = await fs.readdir(assetsDir(deckhand));
   expect(files.some((f) => /logo.*\.png$/.test(f))).toBe(true);
 });
 
-test('AC-30 pasting an image inserts it too', async ({ page, deckhand }) => {
+test('AC-30 pasting an image with the real shortcut inserts it too', async ({ page, deckhand }) => {
   await openEditor(page, deckhand);
-  await pasteInDeck(page, { name: 'pasted.png', type: 'image/png', bytes: png(20, 10) });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: deckhand.url });
+  await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) })]);
+  }, png(20, 10).toString('base64'));
+  await page.locator('iframe#deck').click({ position: { x: 600, y: 300 } });
+  await page.keyboard.press('ControlOrMeta+v');
   await expect(deckFrame(page).locator('img')).toBeVisible();
-  await diskEventually(deckhand.deckPath, (s) => /<img data-ai-id="dh\d+" src="deckhand-assets\/[^"]*pasted[^"]*\.png"/.test(s));
+  await diskEventually(deckhand.deckPath, (s) => /<img data-ai-id="dh\d+" src="deckhand-assets\/[^"]*\.png"/.test(s));
 });
 
 test.describe('rejected uploads', () => {

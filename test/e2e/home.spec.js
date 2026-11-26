@@ -214,7 +214,7 @@ test('back from the editor returns Home with the deck first in recents', async (
   const first = makeDeck(path.join(realHome(deckhand), 'talks'), 'first.html');
   const older = makeDeck(path.join(realHome(deckhand), 'talks'), 'older.html');
   await postApi(deckhand, '/api/deck/open', { path: older });
-  await page.goto(deckhand.url);
+  await page.goto(`${deckhand.url}/edit?deck=${encodeURIComponent(older)}`);
   await expect(topName(page)).toHaveAttribute('title', older);
   await page.getByRole('button', { name: '← Home' }).click();
   await expect(page.locator('.home')).toBeVisible();

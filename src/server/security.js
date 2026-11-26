@@ -182,7 +182,7 @@ const BASE_HEADERS = {
 };
 
 const POLICIES = {
-  app: "frame-ancestors 'self'",
+  app: "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
   deck: "connect-src 'none'; frame-ancestors 'self'",
   svg: "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; frame-ancestors 'self'",
 };
