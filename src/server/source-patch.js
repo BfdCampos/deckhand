@@ -15,6 +15,7 @@ const STYLE_RULES = {
   'max-width': LENGTH,
   translate: new RegExp(`^${NUM}(?:px|%)(?:\\s+${NUM}(?:px|%))?$`),
   transform: new RegExp(`^(?:none|${TRANSFORM_FN}(?:\\s+${TRANSFORM_FN})*)$`),
+  position: /^relative$/,
 };
 
 const missing = (aiId) => new HttpError(409, 'anchor_missing', `There is no element ${aiId} in the deck.`);
@@ -590,6 +591,12 @@ function planSetStyle(index, op) {
     if (v === null || v === '') { clean[k] = null; continue; }
     if (typeof v !== 'string' || v.length > 200 || !STYLE_RULES[k].test(v.trim())) throw badOp('That style value is not allowed.');
     clean[k] = v.trim();
+  }
+  if (clean.position) {
+    const cls = attrValue(info.node, 'class') || '';
+    const slideLike = info.tag === 'section' || cls.split(/\s+/).includes('slide') || attrValue(info.node, 'data-slide') !== undefined;
+    const hasPosition = splitDeclarations(attrValue(info.node, 'style') || '').some((d) => d.name === 'position');
+    if (!slideLike || hasPosition) throw badOp("Deckhand can't set position here.");
   }
   const src = index.source;
   const loc = info.attrs.style;
