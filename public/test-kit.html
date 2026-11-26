@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deckhand UI kit</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <style>
+    .kit { max-width: 1040px; margin: 0 auto; padding: var(--space-6) var(--space-6) 96px; }
+    .kit-top { display: flex; align-items: center; justify-content: space-between; height: 48px; margin-bottom: var(--space-12); }
+    .kit-hero { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-8); max-width: 640px; }
+    .kit-cards { display: grid; grid-template-columns: 1.35fr 1fr; align-items: start; gap: var(--space-4); margin-bottom: 72px; }
+    @media (max-width: 860px) { .kit-cards { grid-template-columns: 1fr; } }
+    .kit-card { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-6); }
+    .kit-card-head { display: flex; align-items: center; gap: var(--space-3); }
+    .kit-card-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-control); background: var(--raised); border: 1px solid var(--line); color: var(--ink-2); }
+    .kit-create-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+    .kit-recents { display: flex; flex-direction: column; margin: 0 calc(var(--space-3) * -1); }
+    .kit-recent-name { font-weight: var(--fw-semibold); font-size: var(--fs-13); }
+    .kit-recent-path { color: var(--muted); }
+    .kit-recent-time { color: var(--muted); font-size: var(--fs-12); flex: none; }
+    .kit-section { padding: var(--space-8) 0; border-top: 1px solid var(--line); }
+    .kit-section > .t-label { display: block; margin-bottom: var(--space-4); }
+    .kit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+    .kit-pane { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+    .kit-rowset { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+    .kit-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: var(--space-2); }
+    .kit-swatch { display: flex; flex-direction: column; gap: 6px; }
+    .kit-chipcolour { height: 40px; border-radius: var(--radius-control); border: 1px solid var(--line); }
+    .kit-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--space-1); }
+    .kit-icon { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-radius: var(--radius-control); color: var(--ink-2); }
+    .kit-icon:hover { background: var(--panel); color: var(--ink); }
+    .kit-icon span { font-size: var(--fs-11); color: var(--muted); }
+    .kit-type { display: flex; flex-direction: column; gap: var(--space-3); }
+    .kit-type-row { display: grid; grid-template-columns: 96px 1fr; align-items: baseline; gap: var(--space-4); }
+    .kit-activity { overflow: hidden; }
+    .kit-activity-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
+    .kit-activity-lines { display: flex; flex-direction: column; gap: 6px; padding: var(--space-3) var(--space-4) var(--space-4); font-size: var(--fs-13); }
+    .kit-activity-line { display: flex; gap: var(--space-2); align-items: center; color: var(--ink-2); }
+    .kit-activity-line .icon { color: var(--muted); }
+    .kit-pop { display: flex; flex-direction: column; gap: var(--space-3); width: 300px; }
+    .kit-log { min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div id="kit" class="kit"></div>
+  <script type="module">
+    import { icon, iconNames } from '/js/ui/icons.js';
+    import { toast, setToastHost } from '/js/ui/toast.js';
+    import { openModal } from '/js/ui/modal.js';
+    import { openPopover, openMenu } from '/js/ui/popover.js';
+    import { pushEscape, attachEscape } from '/js/ui/escape.js';
+    import { el } from '/js/ui/util.js';
+
+    window.kit = { icon, iconNames, toast, setToastHost, openModal, openPopover, openMenu, pushEscape, attachEscape };
+
+    const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+    const mod = isMac ? '⌘' : 'Ctrl';
+    const btn = (label, cls = 'btn-secondary', opts = {}) => el('button', { type: 'button', class: `btn ${cls}`, ...opts }, opts.icon ? icon(opts.icon) : null, label);
+    const section = (label, ...children) => el('section', { class: 'kit-section' }, el('span', { class: 't-label', text: label }), ...children);
+    const pane = (...children) => el('div', { class: 'card kit-pane' }, ...children);
+    const rowset = (...children) => el('div', { class: 'kit-rowset' }, ...children);
+
+    const root = document.getElementById('kit');
+
+    const agentChip = el('button', { type: 'button', class: 'chip', id: 'open-menu', 'aria-haspopup': 'menu' },
+      el('span', { class: 'dot dot-success' }), 'Claude Code', icon('chevron-down', { size: 14 }));
+    let agent = 'claude';
+    agentChip.addEventListener('click', () => openMenu({
+      anchor: agentChip,
+      align: 'end',
+      label: 'Agent',
+      items: [
+        { heading: 'Run with' },
+        { label: 'Claude Code', checked: agent === 'claude', onSelect: () => { agent = 'claude'; toast('Using Claude Code'); } },
+        { label: 'Codex', checked: agent === 'codex', onSelect: () => { agent = 'codex'; toast('Using Codex'); } },
+        { separator: true },
+        { label: 'Check again', icon: 'refresh', onSelect: () => toast('Checked. Claude Code 2.1.331 is ready.', { tone: 'success' }) },
+      ],
+    }));
+
+    root.append(
+      el('header', { class: 'kit-top' },
+        el('a', { class: 'brand-lockup', href: '#' }, el('span', { class: 'brand-mark' }, icon('anchor', { size: 16 })), 'Deckhand'),
+        agentChip),
+      el('div', { class: 'kit-hero' },
+        el('h1', { class: 't-display', text: 'Make a deck with your AI.' }),
+        el('p', { class: 't-lead', text: 'Describe it and your agent builds it, or open one you already have. It stays a single HTML file the whole time.' })),
+    );
+
+    const textarea = el('textarea', {
+      class: 'textarea',
+      rows: 6,
+      'aria-label': 'Describe the deck you want',
+      placeholder: "Describe the deck you want. Who's it for, what should it say, how many slides, any look and feel. For example: a 6-slide pitch for our new coffee subscription, warm and minimal, for the leadership team.",
+    });
+    const savesAs = el('span', { class: 'mono truncate text-muted', text: 'Saves to ~/Deckhand' });
+    const createBtn = el('button', { type: 'button', class: 'btn btn-primary btn-lg', disabled: true },
+      'Create deck', el('span', { class: 'kbd', text: `${mod} Enter` }));
+    textarea.addEventListener('input', () => {
+      const has = textarea.value.trim().length > 0;
+      createBtn.disabled = !has;
+      const slug = textarea.value.toLowerCase().replace(/[^a-z0-9\s-]/g, '').split(/\s+/).filter(Boolean)
+        .filter((w, i) => !(i < 3 && ['a', 'an', 'the', 'make', 'create', 'me'].includes(w))).slice(0, 6).join('-').slice(0, 48);
+      savesAs.textContent = has ? `Saves as ~/Deckhand/${slug || 'untitled-deck'}.html` : 'Saves to ~/Deckhand';
+    });
+    createBtn.addEventListener('click', () => toast('Deck created. Double-click text to edit, or right-click anything to leave a note.', { tone: 'success' }));
+
+    const recent = (name, dir, time, missing) => el('button', { type: 'button', class: 'list-row', style: missing ? 'opacity:.5' : undefined },
+      icon('deck'),
+      el('span', { class: 'col grow' },
+        el('span', { class: 'kit-recent-name truncate', text: name }),
+        el('span', { class: 'kit-recent-path mono truncate', text: dir })),
+      missing ? el('span', { class: 'tag', text: 'Missing' }) : el('span', { class: 'kit-recent-time tnum', text: time }));
+
+    const pathInput = el('input', { class: 'input mono', placeholder: 'Or paste the full path to a .html file', 'aria-label': 'Deck path' });
+
+    root.append(el('div', { class: 'kit-cards' },
+      el('div', { class: 'card-lg kit-card' },
+        el('div', { class: 'kit-card-head' }, el('span', { class: 'kit-card-icon' }, icon('sparkle')), el('h2', { class: 't-card-title', text: 'Create a new deck' })),
+        textarea,
+        el('div', { class: 'kit-create-foot' }, savesAs, createBtn)),
+      el('div', { class: 'card-lg kit-card' },
+        el('div', { class: 'kit-card-head' }, el('span', { class: 'kit-card-icon' }, icon('folder')), el('h2', { class: 't-card-title', text: 'Open a deck' })),
+        el('div', { class: 'kit-recents' },
+          recent('coffee-subscription-pitch.html', '~/Deckhand', '2 hours ago'),
+          recent('q3-roadmap.html', '~/work/planning/2026/q3', 'Yesterday'),
+          recent('offsite-retro.html', '~/Documents/talks', '3 days ago'),
+          recent('old-launch.html', '~/Desktop', '', true)),
+        el('div', { class: 'col gap-2' },
+          el('div', { class: 'input-group' }, pathInput, btn('Open')),
+          el('div', { class: 'row gap-2' }, btn('Browse…', 'btn-ghost btn-sm', { icon: 'folder-open' }), el('span', { class: 'grow' }), el('a', { class: 'link t-small', href: '#', text: 'Try the sample deck' }))))));
+
+    const splitMain = el('button', { type: 'button', class: 'btn btn-primary' }, icon('sparkle'), 'Hand off to Claude Code', el('span', { class: 'pill-count', text: '3' }));
+    const splitCaret = el('button', { type: 'button', class: 'btn btn-primary btn-icon', 'aria-label': 'More hand-off options' }, icon('chevron-down'));
+    splitCaret.addEventListener('click', () => openMenu({
+      anchor: splitCaret,
+      align: 'end',
+      items: [
+        { label: 'Claude Code', checked: true, onSelect: () => {} },
+        { label: 'Codex', checked: false, onSelect: () => {} },
+        { separator: true },
+        { label: 'Copy prompt', icon: 'copy', onSelect: () => toast('Prompt copied') },
+        { label: 'Show prompt', icon: 'eye', onSelect: () => {} },
+      ],
+    }));
+
+    root.append(section('Buttons',
+      el('div', { class: 'kit-grid' },
+        pane(
+          rowset(btn('Create deck', 'btn-primary'), btn('Cancel'), btn('Edit', 'btn-ghost'), btn('Delete', 'btn-danger', { icon: 'trash' })),
+          rowset(btn('Small', 'btn-secondary btn-sm'), btn('Default'), btn('Large', 'btn-secondary btn-lg'), btn('Disabled', 'btn-primary', { disabled: true })),
+          rowset(
+            el('button', { type: 'button', class: 'btn btn-ghost btn-icon', 'aria-label': 'Undo' }, icon('undo')),
+            el('button', { type: 'button', class: 'btn btn-ghost btn-icon', 'aria-label': 'Redo' }, icon('redo')),
+            el('button', { type: 'button', class: 'btn btn-secondary btn-icon', 'aria-label': 'Copy' }, icon('copy')),
+            btn('Text', 'btn-secondary', { icon: 'plus' }), btn('Image', 'btn-secondary', { icon: 'image' }), btn('Stop', 'btn-secondary', { icon: 'stop' }))),
+        pane(
+          el('span', { class: 't-meta', text: 'Split primary, one per view' }),
+          el('div', { class: 'btn-group' }, splitMain, splitCaret),
+          el('div', { class: 'btn-group' },
+            el('button', { type: 'button', class: 'btn btn-secondary' }, icon('play'), 'Run'),
+            el('button', { type: 'button', class: 'btn btn-secondary' }, icon('pencil'), 'Edit')),
+          rowset(el('span', { class: 't-meta', text: 'Shortcuts' }), el('span', { class: 'kbd', text: mod }), el('span', { class: 'kbd', text: 'Z' }), el('span', { class: 'kbd', text: 'Esc' }), el('span', { class: 'kbd', text: 'Enter' }))))));
+
+    root.append(section('Inputs',
+      el('div', { class: 'kit-grid' },
+        pane(
+          el('label', { class: 'field' }, el('span', { class: 'field-label', text: 'Deck path' }),
+            el('input', { class: 'input mono', value: '~/Deckhand/coffee-subscription-pitch.html' }),
+            el('span', { class: 'field-hint', text: 'Accepts .html and .htm' })),
+          el('label', { class: 'field' }, el('span', { class: 'field-label', text: 'With an error' }),
+            el('input', { class: 'input mono', value: '~/Deckhand/missing.html', 'aria-invalid': 'true' }),
+            el('span', { class: 'field-error' }, icon('alert-circle', { size: 14 }), "Can't find that file."))),
+        pane(
+          el('textarea', { class: 'textarea', rows: 3, placeholder: 'Tell the AI what to change here…', 'aria-label': 'Note' }),
+          el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: true }), 'Apply to all similar elements'),
+          el('label', { class: 'check' }, el('input', { type: 'checkbox' }), 'Remember my choice')))));
+
+    root.append(section('Status',
+      el('div', { class: 'kit-grid' },
+        pane(
+          rowset(
+            el('span', { class: 'chip' }, el('span', { class: 'dot dot-success' }), 'Claude Code'),
+            el('span', { class: 'chip' }, el('span', { class: 'dot dot-warning' }), 'No agent'),
+            el('span', { class: 'chip' }, el('span', { class: 'dot dot-working' }), 'Working'),
+            el('span', { class: 'chip chip-quiet tnum' }, icon('clock', { size: 14 }), '1:42')),
+          rowset(
+            el('span', { class: 'badge', text: '1' }), el('span', { class: 'badge', text: '12' }),
+            el('span', { class: 'pill-count', text: '3' }),
+            el('span', { class: 'tag tag-warning', text: 'Still open' }),
+            el('span', { class: 'tag tag-success' }, icon('check', { size: 12 }), 'Done'),
+            el('span', { class: 'tag tag-error', text: "Didn't finish" }),
+            el('span', { class: 'tag', text: 'Missing' })),
+          rowset(
+            el('span', { class: 'row gap-2 t-small text-muted' }, icon('check', { size: 14 }), 'Saved'),
+            el('span', { class: 'row gap-2 t-small text-muted' }, el('span', { class: 'spin' }), 'Saving…'),
+            el('span', { class: 'row gap-2 t-small text-error' }, icon('alert-circle', { size: 14 }), "Couldn't save"))),
+        el('div', { class: 'card kit-activity' },
+          el('div', { class: 'kit-activity-head shimmer' }, el('span', { class: 'dot dot-working' }), el('span', { class: 't-label', text: 'All notes' }), el('span', { class: 'grow' }), el('span', { class: 't-meta tnum', text: '0:14' })),
+          el('div', { class: 'progress-line', style: 'border-radius:0' }),
+          el('div', { class: 'kit-activity-lines' },
+            el('div', { class: 'kit-activity-line rise-in' }, icon('eye', { size: 14 }), 'Reading deck.html'),
+            el('div', { class: 'kit-activity-line rise-in' }, icon('pencil', { size: 14 }), 'Editing deck.html'),
+            el('div', { class: 'kit-activity-line rise-in' }, icon('alert', { size: 14 }), 'Blocked: Bash (not allowed)'),
+            el('div', { class: 'kit-activity-line rise-in text-ink' }, 'Made the second slide two columns and tightened the title.'))))));
+
+    root.append(section('Banners',
+      el('div', { class: 'col gap-2' },
+        el('div', { class: 'banner banner-info' }, icon('info'), el('span', { class: 'banner-text', text: 'No slides found. Editing as one page.' })),
+        el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { class: 'banner-text', text: "This file is read-only. You can browse it and copy prompts, but edits won't save." })),
+        el('div', { class: 'banner banner-error' }, icon('alert-circle'), el('span', { class: 'banner-text', text: "Can't find deck.html any more." }),
+          el('div', { class: 'banner-actions' }, btn('Back to Home', 'btn-secondary btn-sm', { icon: 'arrow-left' }))))));
+
+    const log = el('div', { class: 't-meta kit-log', id: 'escape-log', text: 'Press Escape with something open to see the stack unwind.' });
+    const openModalBtn = btn('Open modal', 'btn-secondary', { id: 'open-modal', icon: 'folder' });
+    openModalBtn.addEventListener('click', () => {
+      const crumbs = el('div', { class: 'row gap-1 t-small text-muted', style: 'margin-bottom: 12px' }, 'Home', icon('chevron-right', { size: 14 }), 'Deckhand');
+      const rows = el('div', { class: 'col' },
+        el('button', { type: 'button', class: 'list-row' }, icon('folder'), el('span', { class: 'grow truncate', text: 'drafts' })),
+        el('button', { type: 'button', class: 'list-row' }, icon('folder'), el('span', { class: 'grow truncate', text: 'talks' })),
+        el('button', { type: 'button', class: 'list-row', 'aria-selected': 'true' }, icon('deck'), el('span', { class: 'grow truncate', text: 'coffee-subscription-pitch.html' })),
+        el('button', { type: 'button', class: 'list-row' }, icon('deck'), el('span', { class: 'grow truncate', text: '<img src=x onerror=alert(1)>.html' })));
+      openModal({
+        title: 'Choose a deck',
+        body: el('div', {}, crumbs, rows),
+        actions: [{ label: 'Cancel' }, { label: 'Open', primary: true, onClick: ({ close }) => { close(); toast('Opened coffee-subscription-pitch.html'); } }],
+        onClose: () => { log.textContent = 'Modal closed'; },
+      });
+    });
+
+    const openPopoverBtn = btn('Leave a note', 'btn-secondary', { id: 'open-popover', icon: 'note' });
+    openPopoverBtn.addEventListener('click', () => {
+      const r = openPopoverBtn.getBoundingClientRect();
+      const area = el('textarea', { class: 'textarea', rows: 3, placeholder: 'Tell the AI what to change here…', 'aria-label': 'Note' });
+      let pop;
+      pop = openPopover({
+        x: r.left,
+        y: r.bottom + 8,
+        label: 'Add a note',
+        canDismiss: () => area.value.trim() === '',
+        onClose: () => { log.textContent = 'Popover closed'; },
+        content: el('div', { class: 'kit-pop' },
+          el('div', { class: 't-meta' }, 'On heading: ', el('span', { class: 'text-ink', text: "'What you can do by hand'" })),
+          area,
+          el('label', { class: 'check' }, el('input', { type: 'checkbox' }), 'Apply to all similar elements'),
+          el('div', { class: 'row gap-2 end' },
+            el('span', { class: 'grow t-meta' }, el('span', { class: 'kbd', text: `${mod} Enter` })),
+            el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Cancel', onclick: () => pop.close() }),
+            el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Add note', onclick: () => { pop.close(); toast('Note added'); } }))),
+      });
+      area.focus();
+    });
+
+    root.append(section('Overlays',
+      pane(
+        rowset(
+          openModalBtn,
+          openPopoverBtn,
+          btn('Toast', 'btn-secondary', { onclick: () => toast('Updated from disk') }),
+          btn('Toast with action', 'btn-secondary', { onclick: () => toast("Couldn't save. The deck changed on disk.", { tone: 'error', action: { label: 'Retry', onClick: () => toast('Saved', { tone: 'success' }) } }) }),
+          btn('Queue three', 'btn-ghost', { onclick: () => { toast('Saved'); toast('Updated from disk'); toast('Undo history cleared'); } })),
+        log)));
+
+    const swatch = (name, value) => el('div', { class: 'kit-swatch' },
+      el('div', { class: 'kit-chipcolour', style: `background:${value}` }),
+      el('span', { class: 't-meta text-ink', text: name }),
+      el('span', { class: 'mono text-muted', text: value }));
+    root.append(section('Palette',
+      el('div', { class: 'kit-swatches' },
+        swatch('bg', '#0f1117'), swatch('stage', '#0a0c11'), swatch('panel', '#171a22'), swatch('raised', '#1e222c'),
+        swatch('hover', '#242936'), swatch('line', '#2a2f3a'), swatch('line strong', '#3a4150'), swatch('ink', '#e7e9ee'),
+        swatch('muted', '#9aa0ad'), swatch('faint', '#6b7180'), swatch('accent', '#ff4f40'), swatch('focus', '#3b82f6'),
+        swatch('success', '#22c55e'), swatch('warning', '#f5b14c'))));
+
+    const typeRow = (label, cls, text) => el('div', { class: 'kit-type-row' }, el('span', { class: 'mono text-muted', text: label }), el('span', { class: cls, text }));
+    root.append(section('Type',
+      el('div', { class: 'kit-type' },
+        typeRow('40 / 650', 't-display', 'Make a deck with your AI.'),
+        typeRow('28 / 650', 't-headline', 'Building your deck'),
+        typeRow('20 / 600', 't-title', "That didn't work"),
+        typeRow('16 / 600', 't-card-title', 'Create a new deck'),
+        typeRow('14 / 400', 't-body', 'Double-click to edit text. Drag to move. Right-click to leave a note.'),
+        typeRow('12 / 400', 't-meta', 'Saves as ~/Deckhand/coffee-subscription-pitch.html'),
+        typeRow('11 / 600', 't-label', 'Notes for the AI'),
+        typeRow('12 mono', 'mono', '~/work/planning/2026/q3/roadmap.html'))));
+
+    root.append(section(`Icons (${iconNames.length})`,
+      el('div', { class: 'kit-icons' }, iconNames.map((n) => el('div', { class: 'kit-icon', title: n }, icon(n, { size: 20 }), el('span', { text: n }))))));
+
+    window.kitReady = true;
+  </script>
+</body>
+</html>

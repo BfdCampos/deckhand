@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A fake deck</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { scroll-snap-type: y mandatory; overflow-y: scroll; font-family: system-ui, sans-serif; background: #12131a; color: #f4f1ea; }
+  .slide { box-sizing: border-box; width: 100vw; height: 100vh; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: center; padding: 8vw; }
+  h1 { font-size: 5vw; margin: 0 0 2vw; }
+  p { font-size: 2vw; opacity: 0.8; }
+</style>
+</head>
+<body>
+<section class="slide">
+  <h1>A fake deck</h1>
+  <p>Made by the fake agent for tests.</p>
+</section>
+<section class="slide">
+  <h2>Second slide</h2>
+  <ul>
+    <li>One point</li>
+    <li>Another point</li>
+  </ul>
+</section>
+</body>
+</html>

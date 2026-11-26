@@ -1,0 +1,12 @@
+{
+  "description": "Never finishes and ignores SIGTERM, so only SIGKILL stops it.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "hang": true,
+      "ignoreTerm": true
+    }
+  ]
+}

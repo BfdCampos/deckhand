@@ -1,0 +1,64 @@
+{
+  "description": "Like default, with 400 ms between steps so tests can see the running state.",
+  "edit": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking",
+      "delay": 400
+    },
+    {
+      "emit": "read",
+      "delay": 400
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true,
+      "delay": 400
+    },
+    {
+      "tick": "all"
+    },
+    {
+      "emit": "text",
+      "text": "I applied the notes and ticked them off.",
+      "delay": 400
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ],
+  "create": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking",
+      "delay": 400
+    },
+    {
+      "emit": "write",
+      "contentFrom": "two-slide.html",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "I made a two-slide deck.",
+      "delay": 400
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}

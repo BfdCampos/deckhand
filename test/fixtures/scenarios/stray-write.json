@@ -1,0 +1,34 @@
+{
+  "description": "Writes other.txt next to the deck as well as editing it. The staging allowlist must keep other.txt out.",
+  "steps": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "read"
+    },
+    {
+      "emit": "write",
+      "file": "other.txt",
+      "content": "x"
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true
+    },
+    {
+      "tick": "all"
+    },
+    {
+      "emit": "result",
+      "text": "Done."
+    },
+    {
+      "exit": 0
+    }
+  ]
+}

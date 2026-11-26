@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"0199a216-77aa-7b01-a1b2-c3d4e5f60718"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Planning the slides**"}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"/tmp/deckhand-run-Zp41/quarterly-review.html","kind":"add"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"I wrote quarterly-review.html with six slides."}}
+{"type":"turn.completed","usage":{"input_tokens":18001,"cached_input_tokens":0,"output_tokens":3120}}
