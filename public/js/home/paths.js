@@ -1,3 +1,5 @@
+import { h } from '../dom.js';
+
 export const OPEN_COPY = {
   not_found: "Can't find that file.",
   not_html: "That's not an HTML file. Deckhand opens .html decks.",
@@ -27,6 +29,18 @@ export function middleTruncate(text, max = 40) {
   if (!text || text.length <= max) return text;
   const tail = Math.ceil((max - 1) * 0.6);
   return `${text.slice(0, max - 1 - tail)}…${text.slice(-tail)}`;
+}
+
+export function splitName(name, tail = 12) {
+  if (!name || name.length <= tail + 4) return [name || '', ''];
+  return [name.slice(0, -tail), name.slice(-tail)];
+}
+
+export function fileName(name, { className = '' } = {}) {
+  const [head, tail] = splitName(name);
+  return h('span', { class: ['fname', className] },
+    h('span', { class: 'fname-head' }, head),
+    h('span', { class: 'fname-tail' }, tail));
 }
 
 const rtf = new Intl.RelativeTimeFormat('en-GB', { numeric: 'auto' });
