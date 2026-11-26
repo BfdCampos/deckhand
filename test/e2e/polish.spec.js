@@ -12,6 +12,8 @@ function unexpected(findings, testInfo) {
   return findings.filter((f) => !known.includes(f));
 }
 
+const SCHEMES = ['dark', 'light'];
+
 const LAYOUTS = [
   { width: 1280, height: 800 },
   { width: 1440, height: 900 },
@@ -26,20 +28,26 @@ for (const s of SCREENS) {
       await page.waitForTimeout(300);
     });
 
-    test(`AC-67 ${s.name} text meets WCAG AA contrast`, async ({ page, deckhand }, testInfo) => {
-      await s.go(page, deckhand);
-      await settle(page);
-      expect(unexpected(await page.evaluate(contrastFailures), testInfo)).toEqual([]);
-    });
+    for (const scheme of SCHEMES) {
+      test.describe(`${scheme} appearance`, () => {
+        test.use({ colorScheme: scheme });
 
-    for (const size of LAYOUTS) {
-      test(`AC-65 ${s.name} at ${size.width}x${size.height} has no overflow or overlap`, async ({ page, deckhand }) => {
-        await page.setViewportSize(size);
-        await s.go(page, deckhand);
-        await settle(page);
-        const { scrollWidth, clientWidth } = await page.evaluate(horizontalOverflow);
-        expect(scrollWidth, 'horizontal overflow').toBeLessThanOrEqual(clientWidth);
-        expect(await page.evaluate(overlaps)).toEqual([]);
+        test(`AC-67 ${s.name} text meets WCAG AA contrast in ${scheme}`, async ({ page, deckhand }, testInfo) => {
+          await s.go(page, deckhand);
+          await settle(page);
+          expect(unexpected(await page.evaluate(contrastFailures), testInfo)).toEqual([]);
+        });
+
+        for (const size of LAYOUTS) {
+          test(`AC-65 ${s.name} at ${size.width}x${size.height} has no overflow or overlap in ${scheme}`, async ({ page, deckhand }) => {
+            await page.setViewportSize(size);
+            await s.go(page, deckhand);
+            await settle(page);
+            const { scrollWidth, clientWidth } = await page.evaluate(horizontalOverflow);
+            expect(scrollWidth, 'horizontal overflow').toBeLessThanOrEqual(clientWidth);
+            expect(await page.evaluate(overlaps)).toEqual([]);
+          });
+        }
       });
     }
 
