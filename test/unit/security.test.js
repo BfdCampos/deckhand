@@ -87,7 +87,7 @@ describe('security', () => {
     const note = await postJson(srv.port, '/api/run-note', { note: { text: 'x', aiId: 'dh1' } }, { Origin: 'null' });
     assert.equal(note.status, 403);
     const state = await request(srv.port, { path: '/api/state' });
-    assert.equal(state.json.deck.deckPath, deckPath);
+    assert.equal(state.json.deck.path, deckPath);
     await new Promise((r) => setTimeout(r, 300));
     assert.equal(exists(logPath), false, 'agent ran');
   });
@@ -116,7 +116,7 @@ describe('security', () => {
       assert.equal(res.json.error.code, 'bad_content_type');
     }
     const state = await request(srv.port, { path: '/api/state' });
-    assert.equal(state.json.deck.deckPath, deckPath);
+    assert.equal(state.json.deck.path, deckPath);
   });
 
   test('same-origin JSON mutations still work', async () => {

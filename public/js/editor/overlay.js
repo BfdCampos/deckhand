@@ -1,5 +1,6 @@
 import { h } from '../dom.js';
 import { doc, win, frameEl, IMG_SEL, SLIDE_SEL } from './frame.js';
+import { isOpen } from './notes.js';
 
 export function mountOverlay(ctx) {
   const ov = ctx.overlayEl;
@@ -16,7 +17,7 @@ export function mountOverlay(ctx) {
   function tick() {
     requestAnimationFrame(tick);
     const deckEl = frameEl();
-    if (!deckEl || !ctx.deck || !doc()) {
+    if (!deckEl || !ctx.deck || !doc() || !doc().body || ctx.root.hidden) {
       if (ov.children.length) { ov.replaceChildren(); pinEls.clear(); selBox = null; }
       return;
     }
@@ -60,11 +61,12 @@ export function mountOverlay(ctx) {
     const l = layer('pinlayer');
     const seen = new Set();
     ctx.notes.forEach((n, i) => {
-      const pos = pinPos(n, fr);
+      let pos = isOpen(n) ? pinPos(n, fr) : null;
+      if (pos && (pos.y < fr.top || pos.y > fr.bottom || pos.x < fr.left || pos.x > fr.right + 12)) pos = null;
       let p = pinEls.get(n.id);
       if (!pos) { if (p) { p.remove(); pinEls.delete(n.id); } return; }
       if (!p) {
-        p = h('div', { class: 'pin' });
+        p = h('button', { type: 'button', class: 'pin' });
         p.onclick = (e) => {
           e.stopPropagation();
           const cur = ctx.notes.find((x) => x.id === p.dataset.nid);
@@ -76,6 +78,7 @@ export function mountOverlay(ctx) {
       p.dataset.nid = n.id;
       p.textContent = i + 1;
       p.title = n.text;
+      p.setAttribute('aria-label', `Note ${i + 1}: ${n.text}`);
       p.style.left = pos.x + 'px';
       p.style.top = pos.y + 'px';
       seen.add(n.id);

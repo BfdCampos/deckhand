@@ -36,7 +36,7 @@ const DECK_ASSET_EXTS = new Set([
 ]);
 
 function deckFileAllowed(rel) {
-  const segments = rel.split('/').filter(Boolean);
+  const segments = rel.split(/[/\\]/).filter(Boolean);
   if (!segments.length || segments.some((s) => s.startsWith('.'))) return false;
   const name = segments.at(-1).toLowerCase();
   return DECK_ASSET_EXTS.has(path.extname(name)) || name.endsWith('.deckhand.json');
@@ -60,7 +60,7 @@ export function sendJson(res, status, obj, headers = {}) {
   res.end(body);
 }
 
-export function createHttp({ config, guard, deckDir }) {
+export function createHttp({ config, guard, deckDir, deckSource = () => null }) {
   const routes = [];
 
   function registerRoutes(table) {
@@ -111,6 +111,12 @@ export function createHttp({ config, guard, deckDir }) {
     const file = await resolveUnder(dir, rel);
     const ext = path.extname(file).toLowerCase();
     const kind = ext === '.html' || ext === '.htm' ? 'deck' : ext === '.svg' ? 'svg' : 'asset';
+    const served = deckSource(file);
+    if (typeof served === 'string') {
+      const data = Buffer.from(served, 'utf8');
+      res.writeHead(200, { ...securityHeaders('deck'), 'Content-Type': typeOf(file), 'Content-Length': data.length });
+      return res.end(req.method === 'HEAD' ? undefined : data);
+    }
     return sendFile(req, res, file, kind);
   }
 

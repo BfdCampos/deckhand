@@ -9,14 +9,33 @@ const home = createHome({ openDeck: (p) => openDeck(p) });
 const editor = createEditor({ onHome: () => showHome({ push: true }) });
 app.append(home.el, editor.el);
 
-function editUrl(deck) { return '/edit?deck=' + encodeURIComponent(deck.path); }
+function urlDeck() {
+  return location.pathname === '/edit' ? new URLSearchParams(location.search).get('deck') : null;
+}
 
-function showEditor(deck, { push = true } = {}) {
-  store.set({ deck });
-  const target = editUrl(deck);
-  if (location.pathname + location.search !== target) history[push ? 'pushState' : 'replaceState'](null, '', target);
+function urlSlide() {
+  const n = Number(new URLSearchParams(location.search).get('slide'));
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function showEditor(deck, { push = true, slide = null, paused = null } = {}) {
+  if (!paused) store.set({ deck });
+  if (urlDeck() !== deck.path) {
+    const target = '/edit?deck=' + encodeURIComponent(deck.path) + (slide ? `&slide=${slide}` : '');
+    history[push ? 'pushState' : 'replaceState']({ deckPath: deck.path }, '', target);
+  } else if (history.state?.deckPath !== deck.path) {
+    history.replaceState({ ...history.state, deckPath: deck.path }, '', location.href);
+  }
   home.hide();
-  editor.open(deck);
+  editor.open(deck, { slide, paused });
+}
+
+function pauseFor(current) {
+  return {
+    deck: current,
+    onSwitch: () => showEditor(current, { push: false }),
+    onHome: () => showHome({ push: true }),
+  };
 }
 
 function showHome({ push = false } = {}) {
@@ -28,32 +47,39 @@ function showHome({ push = false } = {}) {
 
 let pendingOpen = null;
 
-async function openDeck(path, { push = true } = {}) {
+async function openDeck(path, { push = true, slide = null } = {}) {
   pendingOpen = path;
   try {
-    const deck = normaliseDeck(await api.post('/api/open', { path }));
-    showEditor(deck, { push });
+    const deck = normaliseDeck(await api.post('/api/deck/open', { path }));
+    let current = deck;
+    try { current = deckFromState(await api.get('/api/state')) || deck; } catch { /* trust the open */ }
+    if (current.deckId !== deck.deckId) {
+      store.set({ deck: current });
+      showEditor(deck, { push, slide, paused: pauseFor(current) });
+      return;
+    }
+    showEditor(deck, { push, slide });
   } finally {
     pendingOpen = null;
   }
 }
 
-function askToOpen(wanted) {
-  editor.hide();
-  const deck = store.get().deck;
-  home.show(deck ? deck.dir : '');
+function askToOpen(wanted, slide, { fromHistory = false } = {}) {
+  showHome();
   confirmDeepLink(wanted, {
-    onOpen: () => openDeck(wanted, { push: false }).catch((err) => { showHome(); home.showError(err.message); }),
+    reason: fromHistory ? 'history' : 'link',
+    onOpen: () => openDeck(wanted, { push: true, slide }).catch((err) => { showHome(); home.showError(err.message); }),
     onCancel: () => showHome(),
   });
 }
 
 async function route({ boot = false } = {}) {
-  const wanted = location.pathname === '/edit' ? new URLSearchParams(location.search).get('deck') : null;
+  const wanted = urlDeck();
+  const slide = urlSlide();
   const current = store.get().deck;
   if (wanted) {
-    if (current && current.path === wanted) return showEditor(current, { push: false });
-    askToOpen(wanted);
+    if (current && current.path === wanted) return showEditor(current, { push: false, slide });
+    askToOpen(wanted, slide, { fromHistory: history.state?.deckPath === wanted });
     return;
   }
   if (boot && current) return showEditor(current, { push: false });
@@ -61,34 +87,34 @@ async function route({ boot = false } = {}) {
 }
 
 let lastServerId = null;
+let reconnected = false;
 
 onEvent((m) => {
   if (m.type === 'error') { home.showError(m.error); return; }
-  let deck;
-  let reconnected = false;
   if (m.type === 'hello') {
     reconnected = lastServerId !== null;
     lastServerId = m.serverId;
-    deck = deckFromState(m.state);
-  } else if (m.type === 'bound' || m.type === 'deck') {
-    deck = normaliseDeck(m.deck);
-  } else {
     return;
   }
-  if (!deck) return;
-  const current = store.get().deck;
-  const changed = !current || current.path !== deck.path;
+  if (m.type !== 'deck' && m.type !== 'bound') return;
+  const deck = normaliseDeck(m.deck);
+  const wasReconnect = reconnected;
+  reconnected = false;
+  if (!deck) {
+    store.set({ deck: null });
+    if (editor.visible) editor.showClosed();
+    return;
+  }
   store.set({ deck });
-  if (!editor.visible || (!changed && !reconnected)) return;
-  const showing = editor.deck;
-  if (showing && showing.path !== deck.path && deck.path !== pendingOpen) {
-    editor.showElsewhere(deck, {
-      onSwitch: () => showEditor(deck, { push: false }),
-      onHome: () => showHome({ push: true }),
-    });
+  if (!editor.visible) return;
+  const shown = editor.deck;
+  if (!shown || shown.path === deck.path) {
+    if (!shown || shown.deckId !== deck.deckId) showEditor(deck, { push: false, slide: urlSlide() });
+    else if (wasReconnect) editor.ctx.reload('tab');
     return;
   }
-  showEditor(deck, { push: false });
+  if (deck.path === pendingOpen) return;
+  editor.showElsewhere(deck, pauseFor(deck));
 });
 
 window.addEventListener('popstate', () => route());

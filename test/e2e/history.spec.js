@@ -2,10 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from './fixtures.js';
 
-test.use({
-  deckhandOptions: { deck: 'test/fixtures/decks/basic.html' },
-  allowedConsoleErrors: [/\/deckroot\/[^?]*\.deckhand\.json(\?|$)/],
-});
+test.use({ deckhandOptions: { deck: 'test/fixtures/decks/basic.html' } });
 
 test('deck reloads never add history entries, so Back returns to the app and not a stale deck', async ({ page, deckhand }) => {
   const other = path.join(deckhand.home, 'other.html');
@@ -13,8 +10,8 @@ test('deck reloads never add history entries, so Back returns to the app and not
   fs.writeFileSync(other, src);
 
   await page.goto(deckhand.url);
-  await expect(page.locator('.sb-file')).toContainText(deckhand.deckPath);
-  await page.getByRole('button', { name: /Open another deck/ }).click();
+  await expect(page.locator('.topbar-name')).toHaveText('basic.html');
+  await page.getByRole('button', { name: '← Home' }).click();
   await page.getByRole('textbox', { name: 'Path to a deck' }).fill(other);
   await page.keyboard.press('Enter');
   const heading = page.frameLocator('iframe#deck').locator('h1');

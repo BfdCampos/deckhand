@@ -9,6 +9,7 @@ import { listDir } from './src/server/files.js';
 import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
+import { deckRoutes } from './src/server/deck-routes.js';
 import { createLegacyRuns } from './src/server/legacy-runs.js';
 
 let config;
@@ -24,32 +25,37 @@ const serverId = crypto.randomUUID();
 let hub = null;
 const broadcast = (event) => hub?.broadcast(event);
 
+const hubProxy = { broadcast };
 const store = createStore({ stateDir: config.stateDir });
-const session = createDeckSession({ broadcast, home: config.home });
-const notes = createNotes({ session });
+const notes = createNotes({ hub: hubProxy });
+const session = createDeckSession({ hub: hubProxy, store, notes, home: config.home });
 const assets = createAssets({ session });
 const runs = createLegacyRuns({ session, notes, broadcast, config });
 
 let port = null;
 const guard = createGuard({ getPort: () => port });
-const app = createHttp({ config, guard, deckDir: () => session.state.deckDir });
+const app = createHttp({
+  config,
+  guard,
+  deckDir: () => session.meta()?.dir ?? null,
+  deckSource: (file) => (file === session.meta()?.path ? session.servedSource() : null),
+});
 
-async function openDeck(p) {
-  await session.bind(p);
+function legacyFields(meta) {
+  if (!meta) return { bound: false };
+  return { bound: true, deckPath: meta.path, base: meta.name, deckUrl: meta.url, notesJson: meta.notesPath, notesMd: meta.workOrderPath };
 }
 
 function stateSnapshot() {
-  const deck = session.publicState();
-  return { ...deck, deck: deck.bound ? deck : null, serverId };
+  const meta = session.meta();
+  return { ...legacyFields(meta), deck: meta, serverId };
 }
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
   'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home, { home: config.home }),
-  'POST /api/open': async ({ body }) => {
-    await openDeck(body.path);
-    return session.publicState();
-  },
+  'POST /api/open': ({ body }) => session.open(body.path),
+  ...deckRoutes({ session, notes }),
   ...assets.routes,
   ...runs.routes,
 });
@@ -59,21 +65,9 @@ hub = createHub({
   guard,
   snapshot: () => [
     { type: 'hello', serverId, state: stateSnapshot() },
-    { type: 'bound', deck: session.publicState() },
+    { type: 'deck', deck: session.meta() },
+    { type: 'notes', ...notes.snapshot() },
   ],
-  onMessage: async (msg, ws) => {
-    if (msg.type === 'save-html') {
-      if (session.state.deckPath && typeof msg.html === 'string') session.queueWrite(msg.html);
-    } else if (msg.type === 'save-notes') {
-      await notes.save(msg.payload || {});
-    } else if (msg.type === 'open') {
-      try {
-        await openDeck(msg.path);
-      } catch (e) {
-        hub.send(ws, { type: 'error', error: e.message });
-      }
-    }
-  },
 });
 
 function tryListen(server, p) {
@@ -111,7 +105,7 @@ async function shutdown(code) {
   hub.close();
   app.server.closeAllConnections();
   app.server.close();
-  await session.close().catch(() => {});
+  await session.dispose().catch(() => {});
   process.exit(code);
 }
 
@@ -132,7 +126,7 @@ try {
 
 if (config.deckPath) {
   try {
-    await openDeck(config.deckPath);
+    await session.open(config.deckPath);
   } catch (e) {
     console.error(`Couldn't open ${config.deckPath}: ${e.message}`);
   }
