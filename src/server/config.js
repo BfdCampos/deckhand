@@ -38,6 +38,7 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env) {
     publicDir: path.join(ROOT, 'public'),
     sharedDir: path.join(ROOT, 'src/shared'),
     test: env.DECKHAND_TEST === '1',
+    testNow: env.DECKHAND_TEST === '1' && env.DECKHAND_TEST_NOW ? env.DECKHAND_TEST_NOW : null,
     extraBinDirs: env.DECKHAND_EXTRA_BIN_DIRS !== undefined
       ? env.DECKHAND_EXTRA_BIN_DIRS.split(':').filter(Boolean)
       : defaultBinDirs(home),
