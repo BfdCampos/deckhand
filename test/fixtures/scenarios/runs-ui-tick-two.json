@@ -1,0 +1,13 @@
+{
+  "description": "Runs UI: edits the deck and ticks two of the open notes (AC-49).",
+  "steps": [
+    { "emit": "init" },
+    { "emit": "read" },
+    { "emit": "edit", "replace": ["(<h1\\b[^>]*>)", "$1Edited: "], "regex": true },
+    { "tick": "first" },
+    { "tick": "first" },
+    { "emit": "text", "text": "I did two of the three notes." },
+    { "emit": "result" },
+    { "exit": 0 }
+  ]
+}

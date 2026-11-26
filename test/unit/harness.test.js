@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startDeckhand } from '../helpers/deckhand.js';
-import { agentBinDir } from '../helpers/fakes.js';
+import { DECKS, agentBinDir } from '../helpers/fakes.js';
 
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
@@ -15,7 +15,7 @@ test('startDeckhand runs an isolated server that restarts on the same port', asy
     assert.equal((await fetch(dh.url + '/')).status, 200);
 
     assert.ok(dh.home.startsWith(dh.root));
-    assert.equal(fs.readFileSync(dh.deckPath, 'utf8'), fs.readFileSync(path.resolve('test/fixtures/decks/basic.html'), 'utf8'));
+    assert.equal(fs.readFileSync(dh.deckPath, 'utf8'), fs.readFileSync(path.join(DECKS, 'basic.html'), 'utf8'));
     const agentsDir = path.join(dh.root, 'agents');
     assert.equal(fs.realpathSync(agentsDir), fs.realpathSync(agentBinDir(['claude'])));
 

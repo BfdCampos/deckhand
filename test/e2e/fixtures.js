@@ -1,13 +1,15 @@
 import { test as base, expect } from '@playwright/test';
 import { startDeckhand } from '../helpers/deckhand.js';
 
-// Playwright's own per-frame bootstrap is refused inside sandboxed frames (dock
-// thumbnails), and Chrome logs that refusal. It never happens outside automation.
+// Playwright's trace snapshotter is refused inside sandboxed srcdoc frames (dock
+// thumbnails), and Chrome logs that refusal. It only happens while tracing.
 const HARNESS_NOISE = /^Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed/;
+const isHarnessNoise = (msg) => HARNESS_NOISE.test(msg.text()) && msg.location().url === 'about:srcdoc';
 
 export const test = base.extend({
   deckhandOptions: [{}, { option: true }],
   allowedConsoleErrors: [[], { option: true }],
+  expectedApiErrors: [[], { option: true }],
 
   deckhand: async ({ deckhandOptions, context }, use, testInfo) => {
     const dh = await startDeckhand(deckhandOptions);
@@ -25,13 +27,20 @@ export const test = base.extend({
     }
   },
 
-  failOnConsoleErrors: [async ({ context, allowedConsoleErrors }, use) => {
+  failOnConsoleErrors: [async ({ context, allowedConsoleErrors, expectedApiErrors }, use) => {
     const problems = [];
-    const matches = (text) => HARNESS_NOISE.test(text) || allowedConsoleErrors.some((p) => (p instanceof RegExp ? p.test(text) : text.includes(p)));
+    const expectedApi = (msg) => {
+      const m = /^Failed to load resource: the server responded with a status of (\d{3})/.exec(msg.text());
+      if (!m) return false;
+      const { pathname } = new URL(msg.location().url || 'http://x/');
+      return expectedApiErrors.some(({ path: p, status }) => Number(m[1]) === status
+        && pathname.startsWith('/api/') && (p instanceof RegExp ? p.test(pathname) : pathname === p));
+    };
+    const matches = (text) => allowedConsoleErrors.some((p) => (p instanceof RegExp ? p.test(text) : text.includes(p)));
     const allowed = (...texts) => texts.some((t) => t && matches(t));
     const watch = (page) => {
       page.on('console', (msg) => {
-        if (msg.type() === 'error' && !allowed(msg.text(), msg.location().url)) problems.push(`console.error: ${msg.text()} (${msg.location().url})`);
+        if (msg.type() === 'error' && !isHarnessNoise(msg) && !expectedApi(msg) && !allowed(msg.text(), msg.location().url)) problems.push(`console.error: ${msg.text()} (${msg.location().url})`);
       });
       page.on('pageerror', (err) => {
         if (!allowed(err.message)) problems.push(`pageerror: ${err.message}`);

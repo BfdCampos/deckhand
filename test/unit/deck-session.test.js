@@ -415,7 +415,7 @@ describe('deck routes over HTTP', () => {
 
   test('copying the prompt writes the anchors too', async () => {
     const state = await (await fetch(dh.url + '/api/state')).json();
-    const res = await post('/api/implement', {});
+    const res = await fetch(dh.url + '/api/prompt?scope=all', { headers: { Origin: origin } });
     assert.equal(res.status, 200);
     assert.ok(fs.readFileSync(dh.deckPath, 'utf8').includes('data-ai-id'));
     assert.ok(state.deck);

@@ -462,7 +462,10 @@ function ignoreTerm() {
 async function hang(ctx, step) {
   if (step.ignoreTerm) ignoreTerm();
   if (step.child) {
-    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    const trap = step.child === 'ignore-term' ? "process.on('SIGTERM', () => {}); " : '';
+    const child = spawn(process.execPath, ['-e', `${trap}setInterval(() => {}, 1000); process.stdout.write('ready')`], { stdio: ['ignore', 'pipe', 'ignore'] });
+    await new Promise((r) => child.stdout.once('data', r));
+    child.stdout.destroy();
     appendLog({ tool: ctx.tool, mode: 'child', pid: process.pid, childPid: child.pid });
   }
   setInterval(() => {}, 1000);

@@ -50,3 +50,11 @@ const FOCUSABLE = [
 export function focusables(root) {
   return [...root.querySelectorAll(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
 }
+
+export function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}

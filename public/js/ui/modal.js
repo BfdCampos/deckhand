@@ -80,6 +80,8 @@ export function openModal({ title, body, actions = [], onClose, width, initialFo
     if (closed) return;
     closed = true;
     popEscape();
+    scrim.inert = true;
+    scrim.setAttribute('aria-hidden', 'true');
     scrim.classList.remove('is-in');
     scrim.classList.add('is-out');
     afterMotion(scrim, '--dur-pop', () => scrim.remove());

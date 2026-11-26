@@ -24,6 +24,8 @@ async function freePort() {
 
 function hangingClaude(logPath) {
   return `
+if (process.argv.includes('--version')) { console.log('2.1.331 (Claude Code)'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('--tools --restricted --strict-mcp-config --permission-mode --permission-prompts --no-session-persistence --disable-slash-commands --append-system-prompt'); process.exit(0); }
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const g = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: 'ignore' });
@@ -55,7 +57,7 @@ describe('launch', () => {
     const binDir = await makeBin(path.join(root, 'bin'), { claude: 'process.exit(0)' });
     const srv = await startDeckhand({ binDir });
     try {
-      assert.match(srv.stdout(), /^\s*Agent: Claude Code$/m);
+      assert.match(srv.stdout(), /^\s*Agent: Claude Code \(Codex not found\)$/m);
     } finally {
       await srv.stop();
     }
@@ -66,7 +68,7 @@ describe('launch', () => {
     const extra = await makeBin(path.join(root, 'extra'), { claude: 'process.exit(0)' });
     const srv = await startDeckhand({ agents: [], env: { DECKHAND_EXTRA_BIN_DIRS: extra } });
     try {
-      assert.match(srv.stdout(), /^\s*Agent: Claude Code$/m);
+      assert.match(srv.stdout(), /^\s*Agent: Claude Code \(Codex not found\)$/m);
     } finally {
       await srv.stop();
     }
@@ -142,8 +144,11 @@ describe('launch', () => {
       const srv = await startDeckhand({ args: [deck], binDir });
       let pids;
       try {
-        const res = await postJson(srv.port, '/api/run-note', { note: { id: 'n1', text: 'Make it blue', aiId: 'dh1', targetTag: 'h1' } });
-        assert.equal(res.status, 200);
+        const { deckId } = (await request(srv.port, { path: '/api/state' })).json.deck;
+        const note = await postJson(srv.port, '/api/notes', { deckId, op: 'add', note: { text: 'Make it blue', aiId: 'dh1', targetTag: 'h1' } });
+        assert.equal(note.status, 200, note.text);
+        const res = await postJson(srv.port, '/api/runs', { kind: 'edit', scope: 'all' });
+        assert.equal(res.status, 200, res.text);
         pids = await waitFor(async () => {
           try { return JSON.parse((await fsp.readFile(logPath, 'utf8')).trim()); } catch { return null; }
         });

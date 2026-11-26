@@ -104,7 +104,7 @@ describe('m3: bad input gets 4xx, not 500, and the log stays quiet', () => {
   after(async () => { await srv?.stop(); });
 
   test('null, array and scalar JSON bodies get 400 bad_json', async () => {
-    for (const route of ['/api/open', '/api/run-note', '/api/implement']) {
+    for (const route of ['/api/open', '/api/runs', '/api/agents/select']) {
       for (const body of ['null', '[]', '42', '"x"']) {
         const res = await request(srv.port, {
           method: 'POST', path: route, body,
@@ -116,10 +116,13 @@ describe('m3: bad input gets 4xx, not 500, and the log stays quiet', () => {
     }
   });
 
-  test('/shared/* without a shared folder gets 404', async () => {
-    for (const p of ['/shared/anything', '/shared/slug.js']) {
+  test('/shared/ serves the shared modules and 404s anything else', async () => {
+    const slug = await request(srv.port, { path: '/shared/slug.js' });
+    assert.equal(slug.status, 200);
+    assert.match(slug.headers['content-type'], /text\/javascript/);
+    for (const p of ['/shared/anything', '/shared/nope.js', '/shared/..%2Fserver%2Fruns.js']) {
       const res = await request(srv.port, { path: p });
-      assert.equal(res.status, 404, p);
+      assert.ok([403, 404].includes(res.status), `${p} got ${res.status}`);
     }
   });
 
