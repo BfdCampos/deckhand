@@ -1,13 +1,27 @@
 import { api, connectEvents, onEvent, deckFromState, normaliseDeck } from './api.js';
 import { store } from './store.js';
+import { toast } from './ui/toast.js';
 import { confirmDeepLink } from './deep-link.js';
 import { createHome } from './home/home.js';
+import { createGeneration } from './create/generation.js';
 import { createEditor } from './editor/editor.js';
 
 const app = document.getElementById('app');
-const home = createHome({ openDeck: (p) => openDeck(p) });
+const home = createHome({
+  openDeck: (p) => openDeck(p),
+  onCreateStarted: (run) => showGeneration(run.id),
+  onWatchRun: (id) => showGeneration(id),
+});
+const generation = createGeneration({
+  openDeck: (p) => openDeck(p, { push: false }),
+  goHome: ({ description, message } = {}) => {
+    showHome({ description });
+    if (message) toast(message);
+  },
+  showRun: (id, { replace = false } = {}) => showGeneration(id, { push: !replace }),
+});
 const editor = createEditor({ onHome: () => showHome({ push: true }) });
-app.append(home.el, editor.el);
+app.append(home.el, generation.el, editor.el);
 
 function urlDeck() {
   return location.pathname === '/edit' ? new URLSearchParams(location.search).get('deck') : null;
@@ -27,6 +41,7 @@ function showEditor(deck, { push = true, slide = null, paused = null } = {}) {
     history.replaceState({ ...history.state, deckPath: deck.path }, '', location.href);
   }
   home.hide();
+  generation.hide();
   editor.open(deck, { slide, paused });
 }
 
@@ -38,11 +53,19 @@ function pauseFor(current) {
   };
 }
 
-function showHome({ push = false } = {}) {
+function showHome({ push = false, description } = {}) {
   if (location.pathname !== '/' || location.search) history[push ? 'pushState' : 'replaceState'](null, '', '/');
   editor.hide();
-  const deck = store.get().deck;
-  home.show(deck ? deck.dir : '');
+  generation.hide();
+  home.show({ description });
+}
+
+function showGeneration(runId, { push = true } = {}) {
+  const target = '/create?run=' + encodeURIComponent(runId);
+  if (location.pathname + location.search !== target) history[push ? 'pushState' : 'replaceState'](null, '', target);
+  editor.hide();
+  home.hide();
+  generation.show(runId);
 }
 
 let pendingOpen = null;
@@ -68,22 +91,29 @@ function askToOpen(wanted, slide, { fromHistory = false } = {}) {
   showHome();
   confirmDeepLink(wanted, {
     reason: fromHistory ? 'history' : 'link',
-    onOpen: () => openDeck(wanted, { push: true, slide }).catch((err) => { showHome(); home.showError(err.message); }),
+    onOpen: () => openDeck(wanted, { push: true, slide }).catch((err) => { showHome(); home.showError(err); }),
     onCancel: () => showHome(),
   });
 }
 
-async function route({ boot = false } = {}) {
-  const wanted = urlDeck();
-  const slide = urlSlide();
-  const current = store.get().deck;
-  if (wanted) {
+const ROUTES = {
+  '/edit': (params, { current }) => {
+    const wanted = urlDeck();
+    const slide = urlSlide();
+    if (!wanted) return showHome();
     if (current && current.path === wanted) return showEditor(current, { push: false, slide });
-    askToOpen(wanted, slide, { fromHistory: history.state?.deckPath === wanted });
-    return;
-  }
-  if (boot && current) return showEditor(current, { push: false });
-  showHome();
+    return askToOpen(wanted, slide, { fromHistory: history.state?.deckPath === wanted });
+  },
+  '/create': (params) => {
+    const run = params.get('run');
+    return run ? showGeneration(run, { push: false }) : showHome();
+  },
+  '/': (params, { current, boot }) => (boot && current ? showEditor(current, { push: false }) : showHome()),
+};
+
+async function route({ boot = false } = {}) {
+  const handler = ROUTES[location.pathname] || ROUTES['/'];
+  await handler(new URLSearchParams(location.search), { current: store.get().deck, boot });
 }
 
 let lastServerId = null;
@@ -96,7 +126,7 @@ onEvent((m) => {
     lastServerId = m.serverId;
     return;
   }
-  if (m.type !== 'deck' && m.type !== 'bound') return;
+  if (m.type !== 'deck') return;
   const deck = normaliseDeck(m.deck);
   const wasReconnect = reconnected;
   reconnected = false;

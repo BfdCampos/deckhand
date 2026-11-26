@@ -215,7 +215,7 @@ test.describe('reloads', () => {
     const banner = page.locator('.banner', { hasText: "Can't find basic.html any more." });
     await expect(banner).toBeVisible();
     await banner.getByRole('button', { name: 'Back to Home' }).click();
-    await expect(page.locator('.landing')).toBeVisible();
+    await expect(page.locator('.home')).toBeVisible();
   });
 
   test('undo history clears on an external change, with a toast only if it had steps', async ({ page, deckhand }) => {
@@ -269,13 +269,13 @@ test.describe('navigation safety', () => {
 
     const other = await writeDeck(deckhand.home, 'other.html', OTHER);
     await page.getByRole('button', { name: '← Home' }).click();
-    await page.locator('.picker-manual input').fill(other);
-    await page.locator('.picker-manual input').press('Enter');
+    await page.locator('.open-path').fill(other);
+    await page.locator('.open-path').press('Enter');
     await expect(page.locator('.topbar-name')).toHaveText('other.html');
     await expect(deckFrame(page).locator('h1')).toHaveText('Other deck');
 
     await page.goBack();
-    await expect(page.locator('.landing')).toBeVisible();
+    await expect(page.locator('.home')).toBeVisible();
     await page.waitForTimeout(500);
     expect(await readDisk(other)).toBe(OTHER);
   });

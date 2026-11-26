@@ -75,7 +75,7 @@ describe('security', () => {
   });
 
   test('AC-58 foreign Origin cannot open a deck or start a run', async () => {
-    const open = await postJson(srv.port, '/api/open', { path: otherDeck }, { Origin: EVIL });
+    const open = await postJson(srv.port, '/api/deck/open', { path: otherDeck }, { Origin: EVIL });
     assert.equal(open.status, 403);
     assert.equal(open.json.error.code, 'forbidden_origin');
     const run = await postJson(srv.port, '/api/runs', { kind: 'edit', scope: 'all' }, { Origin: EVIL });
@@ -91,7 +91,7 @@ describe('security', () => {
   test('AC-58 cross-site fetch metadata is rejected even without Origin', async () => {
     const res = await request(srv.port, {
       method: 'POST',
-      path: '/api/open',
+      path: '/api/deck/open',
       headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'cross-site' },
       body: JSON.stringify({ path: otherDeck }),
     });
@@ -104,7 +104,7 @@ describe('security', () => {
     for (const type of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', null]) {
       const res = await request(srv.port, {
         method: 'POST',
-        path: '/api/open',
+        path: '/api/deck/open',
         headers: { Origin: `http://127.0.0.1:${srv.port}`, ...(type ? { 'Content-Type': type } : {}) },
         body: JSON.stringify({ path: otherDeck }),
       });
@@ -122,7 +122,7 @@ describe('security', () => {
   });
 
   test('JSON bodies over 1 MB get 413', async () => {
-    const res = await postJson(srv.port, '/api/open', { path: 'x'.repeat(1024 * 1024 + 10) });
+    const res = await postJson(srv.port, '/api/deck/open', { path: 'x'.repeat(1024 * 1024 + 10) });
     assert.equal(res.status, 413);
     assert.equal(res.json.error.code, 'too_large');
   });
@@ -130,7 +130,7 @@ describe('security', () => {
   test('bad JSON gets 400 without a stack', async () => {
     const res = await request(srv.port, {
       method: 'POST',
-      path: '/api/open',
+      path: '/api/deck/open',
       headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${srv.port}` },
       body: '{"path": ',
     });
@@ -140,7 +140,7 @@ describe('security', () => {
   });
 
   test('opening a missing deck does not echo the path', async () => {
-    const res = await postJson(srv.port, '/api/open', { path: path.join(root, 'nope.html') });
+    const res = await postJson(srv.port, '/api/deck/open', { path: path.join(root, 'nope.html') });
     assert.equal(res.status, 400);
     assert.ok(res.json.error.code);
     assertNoLeak(res, root);

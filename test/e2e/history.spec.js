@@ -12,7 +12,7 @@ test('deck reloads never add history entries, so Back returns to the app and not
   await page.goto(deckhand.url);
   await expect(page.locator('.topbar-name')).toHaveText('basic.html');
   await page.getByRole('button', { name: '← Home' }).click();
-  await page.getByRole('textbox', { name: 'Path to a deck' }).fill(other);
+  await page.getByRole('textbox', { name: 'Deck path' }).fill(other);
   await page.keyboard.press('Enter');
   const heading = page.frameLocator('iframe#deck').locator('h1');
   await expect(heading).toHaveText('Other v0');
@@ -26,7 +26,7 @@ test('deck reloads never add history entries, so Back returns to the app and not
 
   await page.goBack();
   await expect(page).toHaveURL(`${deckhand.url}/`);
-  await expect(page.locator('.landing')).toBeVisible();
+  await expect(page.locator('.home')).toBeVisible();
   expect(fs.readFileSync(other, 'utf8')).toContain('Other v3');
   expect(fs.readFileSync(deckhand.deckPath, 'utf8')).toContain('Basic deck');
 });

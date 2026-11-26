@@ -33,8 +33,8 @@ test('R1 an open whose answer arrives after another tab opened a deck pauses ins
     await held;
     await route.fulfill({ response });
   });
-  await page.locator('.picker-manual input').fill(first);
-  await page.locator('.picker-manual input').press('Enter');
+  await page.locator('.open-path').fill(first);
+  await page.locator('.open-path').press('Enter');
   await expect.poll(async () => (await (await page.request.get(`${deckhand.url}/api/state`)).json()).deck?.name).toBe('first.html');
   const firstDeck = (await (await page.request.get(`${deckhand.url}/api/state`)).json()).deck;
 
@@ -80,8 +80,8 @@ test('R5 going Back to a deck from this tab asks with history copy, not link cop
   await openEditor(page, deckhand);
   const other = await writeDeck(deckhand.home, 'other.html', deckHtml('Other'));
   await page.getByRole('button', { name: '← Home' }).click();
-  await page.locator('.picker-manual input').fill(other);
-  await page.locator('.picker-manual input').press('Enter');
+  await page.locator('.open-path').fill(other);
+  await page.locator('.open-path').press('Enter');
   await expect(page.locator('.topbar-name')).toHaveText('other.html');
   await page.goBack();
   await page.goBack();

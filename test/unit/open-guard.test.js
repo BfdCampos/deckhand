@@ -53,11 +53,11 @@ describe('B1 and m2: open only binds real decks, and a failed open changes nothi
   test('each bad path is refused with the spec code and copy, and the deck stays bound', async () => {
     const cases = [[files.md, 'not_html'], [files.dir, 'is_dir'], [files.empty, 'empty'], [files.locked, 'unreadable'], [path.join(root, 'gone.html'), 'not_found']];
     for (const [p, code] of cases) {
-      const res = await postJson(srv.port, '/api/open', { path: p });
+      const res = await postJson(srv.port, '/api/deck/open', { path: p });
       assert.equal(res.status, 400, p);
       assert.deepEqual(res.json.error, { code, message: COPY[code] }, p);
       const state = await bound();
-      assert.equal(state.deckPath, good, `still bound to the good deck after ${code}`);
+      assert.equal(state.deck.path, good, `still bound to the good deck after ${code}`);
     }
     assert.equal(await fsp.readFile(files.md, 'utf8'), '# My private notes\n');
   });
@@ -69,11 +69,11 @@ describe('B1 and m2: open only binds real decks, and a failed open changes nothi
     await new Promise((r) => setTimeout(r, 300));
     assert.equal(messages.filter((m) => m.type === 'deck').length, 1, 'only the connect snapshot');
     ws.close();
-    assert.equal((await bound()).deckPath, good);
+    assert.equal((await bound()).deck.path, good);
   });
 
   test('after a failed open, saves still go to the good deck and never to the failed file', async () => {
-    assert.equal((await postJson(srv.port, '/api/open', { path: files.locked })).status, 400);
+    assert.equal((await postJson(srv.port, '/api/deck/open', { path: files.locked })).status, 400);
     const { deck } = await bound();
     const res = await postJson(srv.port, '/api/deck/ops', {
       deckId: deck.deckId, tabId: 't', baseRev: deck.rev,
@@ -104,7 +104,7 @@ describe('m3: bad input gets 4xx, not 500, and the log stays quiet', () => {
   after(async () => { await srv?.stop(); });
 
   test('null, array and scalar JSON bodies get 400 bad_json', async () => {
-    for (const route of ['/api/open', '/api/runs', '/api/agents/select']) {
+    for (const route of ['/api/deck/open', '/api/runs', '/api/agents/select']) {
       for (const body of ['null', '[]', '42', '"x"']) {
         const res = await request(srv.port, {
           method: 'POST', path: route, body,
@@ -179,7 +179,7 @@ describe('n7: npm start -- ./deck.html resolves against the shell folder', () =>
     const deck = await makeDeck(dir, 'relative.html');
     const srv = await startDeckhand({ args: ['relative.html'], env: { INIT_CWD: dir } });
     try {
-      assert.equal((await request(srv.port, { path: '/api/state' })).json.deckPath, deck);
+      assert.equal((await request(srv.port, { path: '/api/state' })).json.deck.path, deck);
     } finally {
       await srv.stop();
     }
@@ -199,17 +199,17 @@ describe('R2: symlinked decks are judged by their real target', () => {
     await fsp.symlink(good, path.join(dir, 'alias-no-ext'));
     const srv = await startDeckhand({ args: [good] });
     try {
-      const sneaky = await postJson(srv.port, '/api/open', { path: path.join(dir, 'sneaky.html') });
+      const sneaky = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'sneaky.html') });
       assert.equal(sneaky.status, 400);
       assert.equal(sneaky.json.error.code, 'not_html');
-      const dirLink = await postJson(srv.port, '/api/open', { path: path.join(dir, 'dirlink.html') });
+      const dirLink = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'dirlink.html') });
       assert.equal(dirLink.json.error.code, 'is_dir');
-      assert.equal((await request(srv.port, { path: '/api/state' })).json.deckPath, good);
+      assert.equal((await request(srv.port, { path: '/api/state' })).json.deck.path, good);
       assert.equal(await fsp.readFile(target, 'utf8'), 'export SECRET=1\n');
-      const alias = await postJson(srv.port, '/api/open', { path: path.join(dir, 'alias.html') });
+      const alias = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'alias.html') });
       assert.equal(alias.status, 200, 'a .html link to a .html deck still opens');
       assert.equal(alias.json.path, good);
-      const noExt = await postJson(srv.port, '/api/open', { path: path.join(dir, 'alias-no-ext') });
+      const noExt = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'alias-no-ext') });
       assert.equal(noExt.status, 200, 'the real target decides, not the link name');
     } finally {
       await srv.stop();
