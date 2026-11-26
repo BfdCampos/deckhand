@@ -58,6 +58,7 @@ function pauseFor(current) {
 }
 
 function showHome({ push = false, description } = {}) {
+  store.set({ justCreated: null });
   if (location.pathname !== '/' || location.search) history[push ? 'pushState' : 'replaceState'](null, '', '/');
   editor.hide();
   generation.hide();
