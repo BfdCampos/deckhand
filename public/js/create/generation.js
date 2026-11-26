@@ -60,6 +60,7 @@ export function createGeneration({ openDeck, goHome, showRun }) {
 
   let run = null;
   let wantedId = null;
+  let early = [];
   let tick = null;
   let stopping = false;
   let finishing = false;
@@ -235,7 +236,11 @@ export function createGeneration({ openDeck, goHome, showRun }) {
     else if (next.description !== run.description) renderQuote(next.description);
     run = next;
     if (run.status !== 'running') stopping = false;
-    if (activity) card.setLines(activity);
+    if (activity || early.length) {
+      const bySeq = new Map([...(activity || []), ...early].map((l) => [l.seq, l]));
+      card.setLines([...bySeq.values()].sort((x, y) => x.seq - y.seq));
+      early = [];
+    }
     store.set({ run });
     render();
   }
@@ -262,7 +267,10 @@ export function createGeneration({ openDeck, goHome, showRun }) {
   onEvent((m) => {
     if (el.hidden) return;
     if (m.type === 'run') apply(m.run);
-    else if (m.type === 'run-activity' && run && m.runId === run.id && m.line) card.append(m.line);
+    else if (m.type === 'run-activity' && m.line && m.runId === (run ? run.id : wantedId)) {
+      if (run) card.append(m.line);
+      else early.push(m.line);
+    }
     else if (m.type === 'hello' && wantedId) load(wantedId);
   });
 
@@ -272,6 +280,7 @@ export function createGeneration({ openDeck, goHome, showRun }) {
     show(id) {
       wantedId = id;
       run = null;
+      early = [];
       stopping = false;
       finishing = false;
       card.setLines([]);
