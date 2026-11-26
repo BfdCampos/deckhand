@@ -32,7 +32,7 @@ To try it on the sample deck:
 npm run demo
 ```
 
-The demo and "Try the sample deck" both open a copy in `~/Deckhand`, so your checkout of Deckhand never changes.
+The demo and "Try the sample deck" both open a fresh copy in `~/Deckhand` each time (named like `sample-deck-2026-11-26-1802.html`), so you always start from a clean sample and your checkout of Deckhand never changes.
 
 Options: `--port <n>` to choose the port, `--no-open` to keep the browser closed.
 
@@ -51,7 +51,7 @@ New decks are saved in `~/Deckhand`, named after the first few meaningful words 
 
 Pick one from Recent, use Browse… to find it, or paste its full path. Deckhand opens `.html` and `.htm` files, and tells you plainly when something isn't a deck ("That's a folder. Pick an .html file inside it."). Recent shows your last eight decks and marks any that have moved or been deleted as Missing.
 
-New here? Use "Try the sample deck". It opens a copy of the sample in `~/Deckhand`, so you can edit freely.
+New here? Use "Try the sample deck". It opens a fresh copy of the sample in `~/Deckhand` each time, so you can edit freely. Earlier copies stay in Recent like any other deck.
 
 ## Editing
 
