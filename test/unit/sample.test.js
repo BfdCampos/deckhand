@@ -8,6 +8,8 @@ import { request, postJson } from '../helpers/http.js';
 
 const TRACKED = path.join(REPO, 'samples', 'sample-deck.html');
 const original = fs.readFileSync(TRACKED);
+const NOW = { DECKHAND_TEST_NOW: '2026-11-26T18:02:30' };
+const STAMPED = /^sample-deck-\d{4}-\d{2}-\d{2}-\d{4}(-\d+)?\.html$/;
 
 async function editHeading(srv) {
   const { deck } = (await request(srv.port, { path: '/api/state' })).json;
@@ -18,7 +20,9 @@ async function editHeading(srv) {
   return deck;
 }
 
-describe('the sample deck is never edited in the checkout', () => {
+const openSample = (srv) => postJson(srv.port, '/api/deck/open', { path: TRACKED });
+
+describe('"Try the sample deck" always gives a fresh copy', () => {
   let srv;
   afterEach(async () => {
     await srv?.dispose();
@@ -26,36 +30,52 @@ describe('the sample deck is never edited in the checkout', () => {
     assert.deepEqual(fs.readFileSync(TRACKED), original, 'the tracked sample is byte-identical');
   });
 
-  test('opening the tracked sample opens a copy in ~/Deckhand, and edits land there', async () => {
+  test('each open makes a new timestamped copy, and editing one never touches the next', async () => {
     srv = await startDeckhand({ agents: [] });
-    const res = await postJson(srv.port, '/api/deck/open', { path: TRACKED });
-    assert.equal(res.status, 200, res.text);
-    const copy = path.join(srv.home, 'Deckhand', 'sample-deck.html');
-    assert.equal(res.json.path, copy);
+    const first = await openSample(srv);
+    assert.equal(first.status, 200, first.text);
+    assert.equal(path.dirname(first.json.path), path.join(srv.home, 'Deckhand'));
+    assert.match(path.basename(first.json.path), STAMPED);
+    assert.deepEqual(fs.readFileSync(first.json.path), original);
     await editHeading(srv);
-    assert.match(fs.readFileSync(copy, 'utf8'), /Edited in a test/);
+    assert.match(fs.readFileSync(first.json.path, 'utf8'), /Edited in a test/);
 
-    const again = await postJson(srv.port, '/api/deck/open', { path: TRACKED });
-    assert.equal(again.json.path, copy, 'our copy is reused');
-    assert.match(fs.readFileSync(copy, 'utf8'), /Edited in a test/, 'and keeps its edits');
+    const second = await openSample(srv);
+    assert.notEqual(second.json.path, first.json.path);
+    assert.match(path.basename(second.json.path), STAMPED);
+    assert.deepEqual(fs.readFileSync(second.json.path), original, 'the new copy is clean');
+    assert.match(fs.readFileSync(first.json.path, 'utf8'), /Edited in a test/, 'the earlier copy keeps its edits');
+
+    const recents = (await request(srv.port, { path: '/api/recents' })).json.items.map((i) => i.path);
+    assert.deepEqual(recents.slice(0, 2), [second.json.path, first.json.path], 'earlier copies stay in recents');
   });
 
-  test('a different file already called sample-deck.html is left alone', async () => {
-    srv = await startDeckhand({ agents: [] });
+  test('copies made in the same minute get -2 and -3', async () => {
+    srv = await startDeckhand({ agents: [], env: NOW });
+    const names = [];
+    for (let i = 0; i < 3; i++) names.push(path.basename((await openSample(srv)).json.path));
+    assert.deepEqual(names, ['sample-deck-2026-11-26-1802.html', 'sample-deck-2026-11-26-1802-2.html', 'sample-deck-2026-11-26-1802-3.html']);
+  });
+
+  test('a copy remembered by an older version is never reused', async () => {
+    srv = await startDeckhand({ agents: [], env: NOW });
     const dir = path.join(srv.home, 'Deckhand');
-    fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(dir, 'sample-deck.html'), '<h1>Mine</h1>');
-    const res = await postJson(srv.port, '/api/deck/open', { path: TRACKED });
-    assert.equal(res.json.path, path.join(dir, 'sample-deck-2.html'));
-    assert.equal(fs.readFileSync(path.join(dir, 'sample-deck.html'), 'utf8'), '<h1>Mine</h1>');
-    const again = await postJson(srv.port, '/api/deck/open', { path: TRACKED });
-    assert.equal(again.json.path, path.join(dir, 'sample-deck-2.html'));
+    fs.mkdirSync(dir, { recursive: true });
+    const old = path.join(dir, 'sample-deck.html');
+    fs.writeFileSync(old, '<h1>My edited sample</h1>');
+    fs.mkdirSync(path.join(srv.home, '.deckhand'), { recursive: true });
+    fs.writeFileSync(path.join(srv.home, '.deckhand', 'state.json'), JSON.stringify({ version: 1, agent: null, recents: [], sampleCopy: old }));
+    await srv.restart();
+    const res = await openSample(srv);
+    assert.equal(path.basename(res.json.path), 'sample-deck-2026-11-26-1802.html');
+    assert.equal(fs.readFileSync(old, 'utf8'), '<h1>My edited sample</h1>');
+    assert.ok(!('sampleCopy' in JSON.parse(fs.readFileSync(path.join(srv.home, '.deckhand', 'state.json'), 'utf8'))));
   });
 
-  test('npm run demo opens the copy too', async () => {
-    srv = await startDeckhand({ agents: [], args: ['samples/sample-deck.html'], env: { INIT_CWD: REPO } });
+  test('npm run demo opens a fresh copy too', async () => {
+    srv = await startDeckhand({ agents: [], args: ['samples/sample-deck.html'], env: { INIT_CWD: REPO, ...NOW } });
     const { deck } = (await request(srv.port, { path: '/api/state' })).json;
-    assert.equal(deck.path, path.join(srv.home, 'Deckhand', 'sample-deck.html'));
+    assert.equal(deck.path, path.join(srv.home, 'Deckhand', 'sample-deck-2026-11-26-1802.html'));
     await editHeading(srv);
   });
 });
