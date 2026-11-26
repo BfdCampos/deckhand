@@ -1,43 +1,93 @@
 import { h } from '../dom.js';
-import { onEvent, sendLegacy } from '../api.js';
+import { api, onEvent, tabId, normaliseDeck } from '../api.js';
 import { store } from '../store.js';
 import { icon } from '../ui/icons.js';
-import { setToastHost } from '../ui/toast.js';
-import { attachEscape } from '../ui/escape.js';
-import { bindFrame, doc, injectAffordanceStyle, ensureIds, serializeDeck } from './frame.js';
+import { toast, setToastHost } from '../ui/toast.js';
+import { attachEscape, pushEscape } from '../ui/escape.js';
+import { openModal } from '../ui/modal.js';
+import { aiIdOf, setInnerHtml, bindFrame, doc, injectAffordanceStyle, captureScroll, restoreScroll, currentSlideIndex, slides } from './frame.js';
+import { createSaver } from './saver.js';
 import { createManual } from './manual.js';
 import { mountOverlay } from './overlay.js';
 import { mountNotes } from './notes.js';
-import { buildDock } from './dock.js';
+import { createDock } from './dock.js';
 import { mountRuns } from './runs.js';
 
-const CONN_LABEL = { connecting: 'connecting…', live: 'live', reconnecting: 'reconnecting…' };
+const CONN_LABEL = { connecting: 'Connecting…', live: 'Live', reconnecting: 'Reconnecting…' };
+const CONN_DOT = { connecting: 'dot', live: 'dot dot-success', reconnecting: 'dot dot-warning' };
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+const HINT_KEY = 'deckhand.hintDismissed';
+const READ_ONLY_BANNER = { tone: 'warning', icon: 'warning', text: "This file is read-only. You can browse it and copy prompts, but edits won't save." };
 
 export function createEditor({ onHome }) {
-  const iframe = h('iframe', { id: 'deck', title: 'deck' });
+  let iframe = h('iframe', { id: 'deck', title: 'Deck' });
   const overlayEl = h('div', { id: 'overlay', class: 'overlay' });
   const dockEl = h('div', { id: 'dock', class: 'dock', hidden: true });
-  const filePath = h('span', { class: 'sb-file-path t-meta' });
+  const pillText = h('span', null);
+  const veil = h('div', { class: 'editor-veil', hidden: true },
+    h('div', { class: 'editor-pill', role: 'status' }, h('span', { class: 'dot dot-working' }), pillText));
+  const stage = h('div', { class: 'stage' }, iframe, dockEl, veil);
+
   const connDot = h('span', { class: 'dot' });
   const connLabel = h('span', null);
   const conn = h('span', { class: 'conn t-meta' }, connDot, connLabel);
-  const stage = h('div', { class: 'stage' }, iframe, overlayEl, dockEl);
+  const deckName = h('span', { class: 'topbar-name truncate' });
+  const banners = h('div', { class: 'editor-banners' });
 
   const slots = {
+    agent: h('div', { class: 'topbar-agent' }),
     tools: h('div', { class: 'sb-tools' }),
-    notes: h('div', { class: 'sb-section' }),
+    notes: h('div', { class: 'sb-section sb-notes' }),
     activity: h('div', { class: 'sb-section activity' }),
     footer: h('div', { class: 'sb-foot' }),
   };
+
+  const state = { offline: false, missing: false, closed: false, pendingScroll: null, pendingRev: 0, reloadWanted: null, reloadScheduled: false };
+
+  const ctx = {
+    iframe,
+    overlayEl,
+    dockEl,
+    stage,
+    slots,
+    deck: null,
+    rev: 0,
+    gen: 0,
+    notes: [],
+    layoutTweaks: {},
+    selected: null,
+    editing: null,
+    locked: false,
+    canFinish: () => !!ctx.deck && !ctx.locked && !state.missing && !state.closed,
+    canEdit: () => ctx.canFinish() && !ctx.deck.readOnly && !state.offline,
+    canChangeNotes: () => ctx.canEdit(),
+    reload,
+    editEnded,
+    showMissing,
+    showClosed,
+    showReadOnly,
+    setLocked,
+    flushSaves,
+    goHome,
+  };
+
+  const saver = createSaver(ctx);
+  ctx.saver = saver;
+
+  const homeButton = h('button', { type: 'button', class: 'btn btn-ghost btn-sm topbar-home', onclick: goHome }, '← Home');
+  const topbar = h('header', { class: 'topbar' },
+    homeButton,
+    h('span', { class: 'topbar-sep', 'aria-hidden': 'true' }),
+    h('span', { class: 'topbar-deck' }, icon('deck', { size: 14 }), deckName),
+    h('span', { class: 'grow' }),
+    saver.el,
+    slots.agent,
+  );
 
   const sidebar = h('aside', { class: 'sidebar' },
     h('div', { class: 'sb-head' },
       h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
       conn,
-    ),
-    h('div', { class: 'sb-file' },
-      filePath,
-      h('button', { type: 'button', class: 'link link-btn', title: 'Open a different presentation', onclick: () => onHome() }, 'Open another deck →'),
     ),
     slots.tools,
     slots.notes,
@@ -45,104 +95,401 @@ export function createEditor({ onHome }) {
     slots.footer,
   );
 
-  const root = h('div', { class: 'editor', hidden: true }, stage, sidebar);
-
-  let saveTimer = null;
-
-  const ctx = {
-    root,
-    iframe,
+  const root = h('div', { class: 'editor', hidden: true },
+    h('div', { class: 'editor-main' }, topbar, banners, stage),
+    sidebar,
     overlayEl,
-    dockEl,
-    slots,
-    deck: null,
-    notes: [],
-    selected: null,
-    editing: null,
-    pendingReload: false,
-    commit,
-    scheduleSave,
-    reload,
-  };
-
-  let elsewhere = null;
-  const elsewhereText = h('p', { class: 'editor-elsewhere-text' });
-  const switchBtn = h('button', { type: 'button', class: 'btn btn-primary' }, 'Switch to it');
-  const homeBtn = h('button', { type: 'button', class: 'btn btn-secondary' }, icon('home'), 'Go Home');
-  const notice = h('div', { class: 'editor-elsewhere', role: 'alertdialog', 'aria-labelledby': 'editor-elsewhere-text', hidden: true },
-    h('div', { class: 'editor-elsewhere-card' },
-      h('span', { class: 'editor-elsewhere-icon' }, icon('alert')),
-      elsewhereText,
-      h('p', { class: 't-small text-muted' }, "Edits here are paused so nothing is saved into the wrong file."),
-      h('div', { class: 'editor-elsewhere-actions' }, homeBtn, switchBtn)));
-  elsewhereText.id = 'editor-elsewhere-text';
-  root.append(notice);
-
-  function clearElsewhere() {
-    elsewhere = null;
-    stage.inert = false;
-    sidebar.inert = false;
-    notice.hidden = true;
-  }
+  );
+  ctx.root = root;
 
   bindFrame(iframe);
   ctx.manual = createManual(ctx);
+  ctx.innerOf = (el) => ctx.manual.innerOf(el);
+  ctx.setInner = setInnerHtml;
+  ctx.onAllSaved = () => { if (state.reloadWanted && !ctx.editing) reload('tab'); };
+  ctx.onConflicts = (n) => setBanner('conflict', n ? {
+    tone: 'warning',
+    icon: 'warning',
+    text: n === 1
+      ? 'This text changed in another tab or on disk while you were editing it.'
+      : `${n} of your edits changed in another tab or on disk while you were editing them.`,
+    actions: [
+      { label: 'Keep mine', icon: 'check', onClick: () => saver.keepMine() },
+      { label: 'Use theirs', icon: 'refresh', onClick: () => saver.useTheirs() },
+    ],
+  } : null);
+  ctx.serverInnerOf = async (el) => {
+    const aiId = aiIdOf(el);
+    if (!aiId || !ctx.deck) return null;
+    const [source, live] = await Promise.all([
+      fetch(`${ctx.deck.url}${ctx.deck.url.includes('?') ? '&' : '?'}t=${Date.now()}`).then((r) => (r.ok ? r.text() : null)),
+      api.get('/api/state'),
+    ]);
+    if (!source || live.deck?.deckId !== ctx.deck.deckId) return null;
+    const node = new DOMParser().parseFromString(source, 'text/html').querySelector(`[data-ai-id="${CSS.escape(aiId)}"]`);
+    return node ? { inner: node.innerHTML, rev: live.deck.rev } : null;
+  };
   ctx.notesApi = mountNotes(ctx);
+  ctx.dock = createDock(ctx);
   ctx.runs = mountRuns(ctx);
   mountOverlay(ctx);
 
-  slots.tools.append(
-    h('div', { class: 'tools' },
-      h('button', { type: 'button', class: 'btn btn-secondary', title: 'Add a text box', onclick: () => ctx.manual.addText() }, icon('plus'), 'Text'),
-      h('button', { type: 'button', class: 'btn btn-secondary', title: 'Add an image', onclick: () => ctx.manual.addImage() }, icon('image'), 'Image'),
-    ),
-    h('p', { class: 'tools-hint t-meta' }, 'Single-click to select · double-click text to edit · drag to move · right-click anything to leave a note for the AI · paste an image anywhere.'),
+  const textButton = h('button', { type: 'button', class: 'btn btn-secondary', title: 'Add a text box', onclick: () => ctx.manual.addText() }, icon('plus'), 'Text');
+  const imageButton = h('button', { type: 'button', class: 'btn btn-secondary', title: 'Add an image', onclick: () => ctx.manual.addImage() }, icon('image'), 'Image');
+  const hint = h('div', { class: 'tools-hint', hidden: localStorage.getItem(HINT_KEY) === '1' },
+    h('p', { class: 't-meta' }, 'Double-click to edit text. Drag to move. Right-click to leave a note. Paste an image anywhere.'),
+    h('button', {
+      type: 'button',
+      class: 'btn btn-ghost btn-sm btn-icon',
+      'aria-label': 'Dismiss hint',
+      onclick: () => { localStorage.setItem(HINT_KEY, '1'); hint.hidden = true; },
+    }, icon('x', { size: 14 })),
   );
+  slots.tools.append(h('div', { class: 'tools' }, textButton, imageButton), hint);
 
-  const CONN_DOT = { connecting: 'dot', live: 'dot dot-success', reconnecting: 'dot dot-warning' };
-  const showConn = (s) => { connLabel.textContent = CONN_LABEL[s.conn] || ''; connDot.className = CONN_DOT[s.conn] || 'dot'; };
+  function syncControls() {
+    const editable = ctx.canEdit();
+    textButton.disabled = !editable;
+    imageButton.disabled = !editable;
+    root.classList.toggle('is-locked', ctx.locked);
+    root.classList.toggle('is-readonly', !!ctx.deck?.readOnly);
+  }
+
+  const showConn = (s) => {
+    connLabel.textContent = CONN_LABEL[s.conn] || '';
+    connDot.className = CONN_DOT[s.conn] || 'dot';
+    const offline = s.conn === 'reconnecting';
+    if (offline === state.offline) return;
+    state.offline = offline;
+    if (offline) {
+      ctx.selected = null;
+      ctx.notesApi.closePopovers();
+    }
+    setBanner('offline', offline ? { tone: 'info', icon: 'loader', text: 'Lost connection to Deckhand. Trying again…', spin: true } : null);
+    syncControls();
+    ctx.notesApi.render();
+  };
   store.subscribe(showConn);
   showConn(store.get());
 
-  onEvent((m) => { if (m.type === 'deck-changed' && ctx.deck && !root.hidden) reload(); });
-
-  function scheduleSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(commit, 400);
+  const bannerMap = new Map();
+  function setBanner(key, spec) {
+    if (!spec) bannerMap.delete(key);
+    else bannerMap.set(key, spec);
+    banners.replaceChildren(...[...bannerMap.values()].map((b) => h('div', { class: `banner banner-flush banner-${b.tone}`, role: b.tone === 'info' ? 'status' : 'alert' },
+      icon(b.icon),
+      h('span', { class: 'banner-text' }, b.text),
+      b.actions?.length ? h('div', { class: 'banner-actions' }, b.actions.map((a) => h('button', { type: 'button', class: 'btn btn-secondary btn-sm', onclick: a.onClick }, a.icon ? icon(a.icon) : null, a.label))) : null,
+    )));
   }
 
-  function commit() {
-    clearTimeout(saveTimer);
-    if (!doc() || elsewhere) return;
-    sendLegacy({ type: 'save-html', html: serializeDeck() });
-    ctx.notesApi.persist();
+  function showMissing() {
+    state.missing = true;
+    ctx.manual.endEditing();
+    ctx.selected = null;
+    setBanner('missing', { tone: 'error', icon: 'alert-circle', text: `Can't find ${ctx.deck?.name || 'the deck'} any more.`, actions: [{ label: 'Back to Home', icon: 'home', onClick: goHome }] });
+    syncControls();
+    ctx.notesApi.render();
   }
 
-  function load() {
-    const url = ctx.deck.url + '?t=' + Date.now();
-    if (iframe.contentWindow) iframe.contentWindow.location.replace(url);
-    else iframe.src = url;
+  function showClosed() {
+    state.closed = true;
+    ctx.manual.endEditing();
+    ctx.selected = null;
+    setBanner('closed', {
+      tone: 'warning',
+      icon: 'warning',
+      text: 'This deck was closed in another tab.',
+      actions: [{ label: 'Reopen', icon: 'refresh', onClick: reopen }, { label: 'Home', icon: 'home', onClick: goHome }],
+    });
+    syncControls();
+    ctx.notesApi.render();
   }
 
-  function reload() {
-    if (elsewhere) return;
-    if (ctx.editing) { ctx.pendingReload = true; return; }
-    load();
-    ctx.notesApi.load();
+  const elsewhereText = h('p', { class: 'editor-elsewhere-text', id: 'editor-elsewhere-text' });
+  const switchButton = h('button', { type: 'button', class: 'btn btn-primary' }, 'Switch to it');
+  const elsewhereHome = h('button', { type: 'button', class: 'btn btn-secondary' }, icon('home'), 'Go Home');
+  const elsewhere = h('div', { class: 'editor-elsewhere', role: 'alertdialog', 'aria-labelledby': 'editor-elsewhere-text', hidden: true },
+    h('div', { class: 'editor-elsewhere-card', tabindex: '-1' },
+      h('span', { class: 'editor-elsewhere-icon' }, icon('alert')),
+      elsewhereText,
+      h('p', { class: 't-small text-muted' }, 'Edits here are paused so nothing is saved into the wrong file.'),
+      h('div', { class: 'editor-elsewhere-actions' }, elsewhereHome, switchButton)));
+  root.append(elsewhere);
+
+  function setPaused(paused) {
+    stage.inert = paused;
+    sidebar.inert = paused;
+    elsewhere.hidden = !paused;
   }
+
+  function showElsewhere(deck, { onSwitch, onHome }) {
+    state.closed = true;
+    state.elsewhere = true;
+    ctx.manual.endEditing();
+    ctx.selected = null;
+    ctx.notesApi.closePopovers();
+    elsewhereText.textContent = `Another tab opened ${deck.name || deck.path.split('/').pop()}.`;
+    switchButton.onclick = () => confirmLeave(onSwitch);
+    elsewhereHome.onclick = onHome;
+    setPaused(true);
+    syncControls();
+    elsewhere.querySelector('.editor-elsewhere-card').focus();
+  }
+
+  async function reopen() {
+    try {
+      const deck = normaliseDeck(await api.post('/api/deck/open', { path: ctx.deck.path }));
+      open(deck, { slide: currentSlideIndex() || null });
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    }
+  }
+
+  function setLocked(locked, message) {
+    if (locked) {
+      ctx.manual.endEditing();
+      ctx.selected = null;
+      ctx.notesApi.closePopovers();
+    }
+    ctx.locked = !!locked;
+    pillText.textContent = message || 'Your agent is editing your deck…';
+    veil.hidden = !ctx.locked;
+    syncControls();
+    if (ctx.locked) {
+      const pillBox = veil.querySelector('.editor-pill').getBoundingClientRect();
+      const stageBox = stage.getBoundingClientRect();
+      if (pillBox.height) stage.style.setProperty('--toast-top', `${Math.ceil(pillBox.bottom - stageBox.top + 8)}px`);
+    }
+    ctx.notesApi.render();
+  }
+
+  async function flushSaves() {
+    ctx.manual.endEditing();
+    await saver.flush();
+  }
+
+  function confirmLeave(then) {
+    if (!saver.hasUnsaved()) { then(); return; }
+    openModal({
+      title: 'Leave without saving?',
+      width: 440,
+      body: h('p', { class: 't-small text-muted' }, "You have changes that haven't saved. Leave anyway? They'll be lost."),
+      actions: [
+        { label: 'Keep editing', primary: true, onClick: ({ close }) => close() },
+        { label: 'Leave without saving', danger: true, onClick: ({ close }) => { close(); saver.reset(); then(); } },
+      ],
+    });
+  }
+
+  async function goHome() {
+    try { await flushSaves(); } catch { /* go home anyway */ }
+    confirmLeave(onHome);
+  }
+
+
+  function loadFrame(scroll) {
+    state.pendingScroll = scroll;
+    ctx.selected = null;
+    ctx.notesApi.closePopovers();
+    const url = new URL(ctx.deck.url, location.origin);
+    url.searchParams.set('t', String(Date.now()));
+    if (iframe.contentWindow) iframe.contentWindow.location.replace(url.href);
+    else iframe.src = url.href;
+  }
+
+  function reload(reason = 'tab') {
+    if (!ctx.deck) return;
+    const wanted = state.reloadWanted || { toast: false, clear: false };
+    if (reason === 'external') wanted.toast = true;
+    if (reason !== 'tab') wanted.clear = true;
+    if (reason === 'agent' || reason === 'revert' || ctx.locked) wanted.quiet = true;
+    state.reloadWanted = wanted;
+    if (ctx.editing || state.reloadScheduled) return;
+    state.reloadScheduled = true;
+    saver.flush().then(() => {
+      state.reloadScheduled = false;
+      if (ctx.editing || !state.reloadWanted || !ctx.deck || saver.hasUnsaved()) return;
+      const why = state.reloadWanted;
+      state.reloadWanted = null;
+      if (why.clear && saver.clearHistory() && !why.quiet) toast('Undo history cleared');
+      if (why.toast) toast('Updated from disk');
+      loadFrame(captureScroll());
+    });
+  }
+
+  function editEnded() {
+    if (state.reloadWanted) reload('tab');
+  }
+
+  onEvent((m) => {
+    if (!ctx.deck || m.deckId !== ctx.deck.deckId) return;
+    if (m.type === 'deck-changed') {
+      if (m.source === 'tab' && m.byTab === tabId) { ctx.rev = Math.max(ctx.rev, m.rev); return; }
+      state.pendingRev = Math.max(state.pendingRev, m.rev);
+      if (state.missing) { state.missing = false; setBanner('missing', null); syncControls(); }
+      reload(m.source);
+    } else if (m.type === 'deck-missing') {
+      showMissing();
+    }
+  });
+
+  let scrollTimer = null;
+  function onDeckScroll() {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      if (root.hidden || !doc()) return;
+      const index = currentSlideIndex();
+      ctx.dock.setActive(index);
+      if (!index || location.pathname !== '/edit') return;
+      const url = new URL(location.href);
+      if (url.searchParams.get('slide') === String(index)) return;
+      url.searchParams.set('slide', String(index));
+      history.replaceState(history.state, '', url);
+    }, 120);
+  }
+
+  function onKey(e) {
+    if (root.hidden || e.defaultPrevented || e.isComposing) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"], .dialog-scrim, .popover')) return;
+    if (document.querySelector('.dialog-scrim')) return;
+    if (t && t.ownerDocument === document && t !== document.body && t !== iframe) return;
+    const mod = e.metaKey || e.ctrlKey;
+    const key = e.key.toLowerCase();
+    if (mod && key === 'z') {
+      e.preventDefault();
+      if (!ctx.canEdit()) return;
+      if (e.shiftKey) saver.redo();
+      else saver.undo();
+    } else if (mod && key === 'y' && !IS_MAC) {
+      e.preventDefault();
+      if (ctx.canEdit()) saver.redo();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.selected && !mod) {
+      e.preventDefault();
+      ctx.manual.deleteSelected();
+    }
+  }
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('beforeunload', (e) => {
+    if (root.hidden || !saver.hasUnsaved()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+  document.addEventListener('paste', (e) => {
+    if (root.hidden || document.querySelector('.dialog-scrim')) return;
+    const t = document.activeElement;
+    if (t && t !== document.body && t !== iframe && t.closest('input, textarea, select, [contenteditable="true"], .popover')) return;
+    ctx.manual.onAppPaste(e);
+  });
+
+  pushEscape(() => {
+    if (root.hidden || !ctx.selected) return false;
+    ctx.selected = null;
+    return true;
+  });
 
   function enhance() {
     const d = doc();
-    if (!d || root.hidden || d.URL === 'about:blank') return;
+    if (!ctx.deck || !d || !d.body || !d.URL.includes('/deckroot/')) return;
     injectAffordanceStyle(d);
     attachEscape(d);
-    ensureIds(d);
     ctx.manual.wire(d);
-    ctx.notesApi.load();
-    buildDock(ctx);
+    d.addEventListener('keydown', onKey);
+    d.addEventListener('scroll', onDeckScroll, { capture: true, passive: true });
+    ctx.gen++;
+    ctx.rev = Math.max(ctx.rev, state.pendingRev);
+    const scroll = state.pendingScroll;
+    state.pendingScroll = null;
+    restoreScroll(scroll);
+    requestAnimationFrame(() => restoreScroll(scroll));
+    ctx.dock.build();
+    ctx.dock.setActive(currentSlideIndex());
     ctx.manual.clearSelection();
+    setBanner('noslides', ctx.deck.hasSlides === false || !slides().length
+      ? { tone: 'info', icon: 'info', text: 'No slides found. Editing as one page.' }
+      : null);
+    document.body.dataset.ready = String(ctx.gen);
   }
   iframe.addEventListener('load', enhance);
+
+  function freshFrame() {
+    const next = h('iframe', { id: 'deck', title: 'Deck' });
+    next.addEventListener('load', enhance);
+    iframe.replaceWith(next);
+    iframe = next;
+    ctx.iframe = next;
+    bindFrame(next);
+  }
+
+  function updateMeta(deck) {
+    const wasReadOnly = !!ctx.deck?.readOnly;
+    ctx.deck = { ...ctx.deck, ...deck };
+    store.set({ deck: ctx.deck });
+    setBanner('readonly', ctx.deck.readOnly ? READ_ONLY_BANNER : null);
+    syncControls();
+    ctx.notesApi.render();
+    if (wasReadOnly && !ctx.deck.readOnly && saver.hasUnsaved()) saver.retry();
+  }
+
+  function showReadOnly() {
+    if (ctx.deck) ctx.deck = { ...ctx.deck, readOnly: true };
+    setBanner('readonly', READ_ONLY_BANNER);
+    syncControls();
+  }
+
+  function reattach(deck) {
+    ctx.deck = deck;
+    ctx.rev = deck.rev ?? 0;
+    state.pendingRev = 0;
+    state.missing = !!deck.missing;
+    state.closed = false;
+    state.elsewhere = false;
+    setPaused(false);
+    saver.clearHistory();
+    store.set({ deck });
+    for (const key of ['closed', 'missing']) setBanner(key, null);
+    syncControls();
+    ctx.notesApi.load();
+    state.reloadWanted = { toast: false, clear: true };
+    saver.retry();
+  }
+
+  function open(deck, { slide, paused } = {}) {
+    ctx.manual.endEditing();
+    if (!paused && ctx.deck && ctx.deck.path === deck.path && !root.hidden && saver.hasUnsaved()) {
+      reattach(deck);
+      return;
+    }
+    if (ctx.deck) freshFrame();
+    state.elsewhere = false;
+    ctx.deck = deck;
+    ctx.rev = deck.rev ?? 0;
+    state.pendingRev = 0;
+    state.missing = !!deck.missing;
+    state.closed = false;
+    state.reloadWanted = null;
+    setPaused(false);
+    saver.clearHistory();
+    saver.reset();
+    store.set({ deck });
+    deckName.textContent = deck.name;
+    deckName.title = deck.path;
+    document.title = `${deck.name} · Deckhand`;
+    bannerMap.clear();
+    if (state.offline) bannerMap.set('offline', { tone: 'info', icon: 'loader', text: 'Lost connection to Deckhand. Trying again…' });
+    setBanner('readonly', deck.readOnly ? READ_ONLY_BANNER : null);
+    if (state.missing) showMissing();
+    syncControls();
+    root.hidden = false;
+    setToastHost(stage);
+    if (paused) {
+      showElsewhere(paused.deck, paused);
+      return;
+    }
+    ctx.notesApi.load();
+    loadFrame(slide ? { slide: Number(slide), frac: 0 } : null);
+  }
 
   return {
     el: root,
@@ -150,30 +497,25 @@ export function createEditor({ onHome }) {
     stage,
     get visible() { return !root.hidden; },
     get deck() { return ctx.deck; },
-    showElsewhere(deck, { onSwitch, onHome }) {
-      clearTimeout(saveTimer);
-      elsewhere = deck;
-      stage.inert = true;
-      sidebar.inert = true;
-      elsewhereText.textContent = `Another tab opened ${deck.name || deck.path.split('/').pop()}.`;
-      switchBtn.onclick = onSwitch;
-      homeBtn.onclick = onHome;
-      notice.hidden = false;
-      switchBtn.focus();
+    get paused() { return !!state.elsewhere; },
+    open,
+    reopen,
+    updateMeta,
+    reconnected() {
+      if (saver.hasUnsaved()) saver.retry();
+      else reload('tab');
     },
-    open(deck) {
-      clearElsewhere();
-      ctx.deck = deck;
-      filePath.textContent = deck.path;
-      root.hidden = false;
-      setToastHost(stage);
-      load();
-    },
+    showClosed,
+    showElsewhere,
     hide() {
-      clearElsewhere();
+      ctx.manual.endEditing();
+      ctx.notesApi.closePopovers();
+      setPaused(false);
       root.hidden = true;
       iframe.contentWindow?.location.replace('about:blank');
       setToastHost(null);
+      delete document.body.dataset.ready;
+      document.title = 'Deckhand';
     },
   };
 }

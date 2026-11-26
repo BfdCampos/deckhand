@@ -1,77 +1,97 @@
 import { h } from '../dom.js';
 import { api } from '../api.js';
+import { store } from '../store.js';
 import { icon } from '../ui/icons.js';
+import { createAgentChip, setAgents } from '../ui/agent-chip.js';
+import { createCreateCard, readDraft } from './create-card.js';
+import { createOpenCard } from './open-card.js';
 
-export function createHome({ openDeck }) {
-  const pathLabel = h('div', { class: 'picker-path' });
-  const list = h('div', { class: 'picker-list' });
-  const errorText = h('span', null);
-  const error = h('div', { class: 'field-error home-error', role: 'alert', hidden: true }, icon('alert-circle', { size: 14 }), errorText);
-  const manual = h('input', { type: 'text', class: 'input mono', placeholder: '…or paste an absolute path to a .html file', 'aria-label': 'Path to a deck' });
+export function createHome({ openDeck, onCreateStarted, onWatchRun, onContinue }) {
+  let info = null;
+  const getInfo = () => info;
 
-  const open = async (p) => {
-    showError('');
-    try { await openDeck(p); } catch (err) { showError(err.message); }
-  };
+  const chip = createAgentChip();
+  const create = createCreateCard({ getInfo, onStarted: (run) => onCreateStarted(run) });
+  const open = createOpenCard({ openDeck, getInfo });
 
-  manual.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(manual.value.trim()); });
+  const runningText = h('span', { class: 'home-running-text' });
+  const watch = h('button', { type: 'button', class: 'btn btn-secondary btn-sm' }, 'Watch it', icon('arrow-right', { size: 14 }));
+  const running = h('div', { class: 'banner banner-info home-running', role: 'status', hidden: true },
+    h('span', { class: 'dot dot-working' }), runningText, h('span', { class: 'grow' }), watch);
 
-  const el = h('div', { class: 'landing', hidden: true },
-    h('div', { class: 'landing-card' },
-      h('div', { class: 'brand-lockup brand' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
-      h('p', { class: 'tagline t-card-title' }, 'An HTML presentation editor, built for your AI.'),
-      h('p', { class: 'hint t-small text-muted' },
-        'Pick the ', h('code', null, '.html'), ' deck you want to edit. Your AI keeps writing to the same file, and your hand edits and notes ride along.',
-      ),
-      h('div', { class: 'picker' }, pathLabel, list),
-      h('div', { class: 'input-group picker-manual' },
-        manual,
-        h('button', { type: 'button', class: 'btn btn-secondary', onclick: () => open(manual.value.trim()) }, 'Open'),
-      ),
-      error,
-    ),
-  );
+  const continueName = h('span', { class: 'truncate' });
+  const continueBtn = h('button', { type: 'button', class: 'btn btn-secondary home-continue', hidden: true, onclick: () => onContinue() },
+    icon('deck'), h('span', null, 'Continue editing ', continueName), icon('arrow-right', { size: 14 }));
 
-  function row(name, iconName, onClick, cls) {
-    return h('button', { type: 'button', class: ['list-row picker-row', cls], onclick: onClick },
-      icon(iconName),
-      h('span', { class: 'name' }, name),
-    );
+  const el = h('main', { class: 'home', hidden: true },
+    h('div', { class: 'home-inner' },
+      h('header', { class: 'home-top' },
+        h('span', { class: 'brand-lockup' }, h('span', { class: 'brand-mark' }, icon('anchor')), 'Deckhand'),
+        chip.el),
+      h('section', { class: 'home-hero' },
+        h('h1', { class: 't-display home-title' }, 'Make a deck with your AI.'),
+        h('p', { class: 't-lead home-lead' }, 'Describe it and your agent builds it, or open one you already have. It stays a single HTML file the whole time.'),
+        continueBtn),
+      running,
+      h('div', { class: 'home-cards' }, create.el, open.el)));
+
+  function renderContinue() {
+    const { deck } = store.get();
+    continueBtn.hidden = !deck;
+    if (deck) continueName.textContent = deck.name;
   }
 
-  async function loadDir(dir) {
-    let d;
+  function renderRunning() {
+    const { run } = store.get();
+    const active = run && run.status === 'running';
+    running.hidden = !active;
+    const editing = active && run.kind === 'edit';
+    open.setBusy(editing ? `Opening another deck waits until ${run.agentName || 'your agent'} finishes.` : null);
+    if (!active) return;
+    const who = run.agentName || 'Your agent';
+    if (run.kind === 'create') {
+      runningText.textContent = `${who} is building a deck`;
+      watch.hidden = false;
+      watch.onclick = () => onWatchRun(run.id);
+    } else {
+      runningText.textContent = `${who} is editing ${run.targetPath ? run.targetPath.split('/').pop() : 'a deck'}`;
+      watch.hidden = false;
+      watch.onclick = () => onContinue();
+    }
+  }
+
+  store.subscribe((_, patch) => {
+    if ('run' in patch) renderRunning();
+    if ('deck' in patch) renderContinue();
+  });
+
+  async function refresh() {
     try {
-      d = await api.get('/api/fs?dir=' + encodeURIComponent(dir || ''));
-    } catch (err) {
-      showError(err.message);
-      return;
+      info = await api.get('/api/state');
+    } catch {
+      info = null;
     }
-    pathLabel.textContent = d.path;
-    const rows = [];
-    if (d.parent && d.parent !== d.path) rows.push(row('..', 'folder-open', () => loadDir(d.parent), 'up'));
-    for (const e of d.entries) {
-      const full = d.path + '/' + e.name;
-      if (e.isDir) rows.push(row(e.name, 'folder', () => loadDir(full)));
-      else rows.push(row(e.name, 'deck', () => open(full), 'html'));
-    }
-    list.replaceChildren(...rows);
-  }
-
-  function showError(msg) {
-    const text = msg && typeof msg === 'object' ? msg.message : msg;
-    errorText.textContent = text || '';
-    error.hidden = !text;
+    store.set({ info });
+    if (info && 'agents' in info) setAgents(info.agents);
+    if (info && 'run' in info) store.set({ run: info.run });
+    create.render();
+    create.refreshTarget();
+    renderRunning();
+    renderContinue();
+    await open.load();
   }
 
   return {
     el,
-    show(dir) {
-      showError('');
+    show({ description } = {}) {
       el.hidden = false;
-      loadDir(dir);
+      open.showError('');
+      create.setDraft(description ?? readDraft());
+      create.render();
+      refresh();
+      requestAnimationFrame(() => create.focus());
     },
     hide() { el.hidden = true; },
-    showError,
+    showError(msg) { open.showError(msg); },
   };
 }

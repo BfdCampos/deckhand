@@ -4,8 +4,6 @@ import { test, expect } from './fixtures.js';
 
 const EVIL = '<img src=x onerror=alert(1)>';
 
-test.use({ allowedConsoleErrors: [/\/deckroot\/[^?]*\.deckhand\.json(\?|$)/] });
-
 test.beforeEach(async ({ deckhand }) => {
   await fs.mkdir(path.join(deckhand.home, EVIL));
   await fs.writeFile(
@@ -16,7 +14,8 @@ test.beforeEach(async ({ deckhand }) => {
 
 test('file and folder names render as literal text in Browse', async ({ page, deckhand }) => {
   await page.goto(deckhand.url);
-  const browse = page.locator('.picker-list');
+  await page.getByRole('button', { name: 'Browse…' }).click();
+  const browse = page.locator('.browse-list');
   await expect(browse.getByText(`${EVIL}.html`, { exact: true })).toBeVisible();
   await expect(browse.getByText(EVIL, { exact: true })).toBeVisible();
   await expect(page.locator('#app img')).toHaveCount(0);
@@ -24,8 +23,10 @@ test('file and folder names render as literal text in Browse', async ({ page, de
 
 test('deck name renders as literal text in the top bar', async ({ page, deckhand }) => {
   await page.goto(deckhand.url);
-  await page.locator('.picker-list').getByText(`${EVIL}.html`, { exact: true }).click();
-  await expect(page.locator('.sb-file')).toContainText(path.join(deckhand.home, `${EVIL}.html`));
+  await page.getByRole('button', { name: 'Browse…' }).click();
+  await page.locator('.browse-list').getByText(`${EVIL}.html`, { exact: true }).click();
+  await expect(page.locator('.topbar-name')).toHaveText(`${EVIL}.html`);
+  expect(await page.locator('.topbar-name').getAttribute('title')).toContain(`${EVIL}.html`);
   await expect(page.frameLocator('iframe#deck').locator('h1')).toHaveText('Hello');
   await expect(page.locator('#app img')).toHaveCount(0);
 });

@@ -19,7 +19,7 @@ function pointAt(link, dir) {
 }
 
 export async function startDeckhand({
-  deck, copyDeck = true, agents = ['claude', 'codex'], binDir, env = {}, args = [], portArgs = ['--port', '0'], scenario,
+  deck, copyDeck = true, agents = ['claude', 'codex'], binDir, env = {}, args = [], portArgs = ['--port', '0'], scenario, noOpen = true,
 } = {}) {
   const root = tempDir('deckhand-e2e-');
   const tmp = path.join(root, 'tmp');
@@ -90,7 +90,7 @@ export async function startDeckhand({
   }
 
   async function start(ports) {
-    const started = await launch([...ports, '--no-open', ...args, ...(deckPath ? [deckPath] : [])]);
+    const started = await launch([...ports, ...(noOpen ? ['--no-open'] : []), ...args, ...(deckPath ? [deckPath] : [])]);
     child = started.proc;
     dh.url = started.url;
     dh.port = started.port;
@@ -114,10 +114,13 @@ export async function startDeckhand({
     agentLog: (query) => readAgentLog(logPath, query),
     async restart() {
       const port = dh.port;
-      await stop();
-      await start(['--port', String(port)]);
-      if (dh.port !== port) throw new Error(`Deckhand came back on port ${dh.port}, not ${port}`);
-      return dh;
+      for (let attempt = 1; ; attempt++) {
+        await stop();
+        await start(['--port', String(port)]);
+        if (dh.port === port) return dh;
+        if (attempt === 3) throw new Error(`Deckhand came back on port ${dh.port}, not ${port}`);
+        await new Promise((r) => setTimeout(r, 200));
+      }
     },
     stop,
     setAgents(list) {

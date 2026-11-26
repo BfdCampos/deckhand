@@ -106,20 +106,28 @@ export function readBody(req, limit) {
     const overflow = () => {
       over = true;
       chunks.length = 0;
-      reject(tooLarge());
     };
-    if (Number(req.headers['content-length']) > limit) overflow();
+    const declared = Number(req.headers['content-length']);
+    if (declared > DRAIN_LIMIT) {
+      over = true;
+      reject(tooLarge());
+      return;
+    }
+    if (declared > limit) overflow();
     req.on('data', (chunk) => {
       size += chunk.length;
       if (over) {
-        if (size > DRAIN_LIMIT) req.destroy();
+        if (size > DRAIN_LIMIT) {
+          reject(tooLarge());
+          req.destroy();
+        }
         return;
       }
       if (size > limit) return overflow();
       chunks.push(chunk);
     });
-    req.on('end', () => { if (!over) resolve(Buffer.concat(chunks)); });
-    req.on('error', (e) => { if (!over) reject(e); });
+    req.on('end', () => (over ? reject(tooLarge()) : resolve(Buffer.concat(chunks))));
+    req.on('error', (e) => reject(e));
   });
 }
 
@@ -174,7 +182,7 @@ const BASE_HEADERS = {
 };
 
 const POLICIES = {
-  app: "frame-ancestors 'self'",
+  app: "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
   deck: "connect-src 'none'; frame-ancestors 'self'",
   svg: "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; frame-ancestors 'self'",
 };

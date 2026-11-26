@@ -84,6 +84,8 @@ export function openPopover({
     clearTimeout(nudgeTimer);
     for (const d of docs) d.removeEventListener('pointerdown', onPointerDown, true);
     popEscape();
+    node.inert = true;
+    node.setAttribute('aria-hidden', 'true');
     node.classList.remove('is-in');
     node.classList.add('is-out');
     afterMotion(node, '--dur-pop', () => node.remove());

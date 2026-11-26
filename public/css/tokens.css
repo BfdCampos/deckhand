@@ -1,46 +1,60 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 
-  --bg: #0f1117;
-  --stage: #0a0c11;
-  --panel: #171a22;
-  --raised: #1e222c;
-  --hover: #242936;
-  --field: #12151c;
-  --line: #2a2f3a;
-  --line-strong: #3a4150;
-  --line-soft: #1f232c;
+  --bg: #f7f6f3;
+  --stage: #dfdcd6;
+  --panel: #ffffff;
+  --raised: #f3f2ef;
+  --hover: #ecebe7;
+  --field: #ffffff;
+  --line: #e4e1db;
+  --line-strong: #cfcbc4;
+  --line-soft: #efede9;
 
-  --ink: #e7e9ee;
-  --ink-2: #c4c8d1;
-  --muted: #9aa0ad;
-  --placeholder: #7f8592;
-  --faint: #6b7180;
+  --ink: #1c1b1f;
+  --ink-2: #3f3d45;
+  --muted: #64616a;
+  --placeholder: #75717a;
+  --faint: #a3a0a8;
 
   --accent: #ff4f40;
   --accent-hover: #ff6b5f;
-  --accent-press: #ff3321;
+  --accent-press: #f03a2a;
+  --accent-ink: #c7351f;
   --on-accent: #190a08;
   --accent-tint: #ff4f4014;
   --accent-tint-strong: #ff4f4026;
   --accent-line: #ff4f4059;
 
-  --focus: #3b82f6;
-  --focus-ring: #3b82f640;
-  --select: #3b82f6;
-  --link: #8ab4ff;
+  --focus: #2f6fe4;
+  --focus-ring: #2f6fe433;
+  --select: #2f6fe4;
+  --link: #1d4ed8;
+  --selection: #2f6fe433;
 
-  --success: #22c55e;
-  --success-tint: #22c55e14;
-  --success-line: #22c55e4d;
-  --warning: #f5b14c;
-  --warning-tint: #f5b14c14;
-  --warning-line: #f5b14c4d;
-  --error: #ff4f40;
-  --error-tint: #ff4f4014;
-  --error-line: #ff4f4059;
+  --success: #137333;
+  --success-tint: #13733314;
+  --success-line: #13733340;
+  --warning: #9a4a06;
+  --warning-tint: #9a4a0612;
+  --warning-line: #9a4a0640;
+  --error: #c42b1c;
+  --error-ink: #b42318;
+  --error-tint: #c42b1c12;
+  --error-line: #c42b1c4d;
 
-  --scrim: #05060acc;
+  --scrim: #1c1b1f2e;
+  --veil: #1c1b1f12;
+  --shimmer: #ffffffb3;
+  --dock-bg: #ffffffd9;
+  --dock-line: #1c1b1f1a;
+  --dock-tile-line: #1c1b1f26;
+  --dock-tile-line-hover: #1c1b1f59;
+  --tile-shadow: 0 10px 26px #1c1b1f33;
+  --shadow-small: 0 1px 3px #1c1b1f2e;
+  --shadow-float: 0 12px 32px #1c1b1f1f, 0 2px 6px #1c1b1f0f;
+  --shadow-inset-top: inset 0 1px 0 #ffffff;
+  --highlight: #ffffff66;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
@@ -88,9 +102,7 @@
   --control-h: 32px;
   --control-h-lg: 40px;
 
-  --shadow-float: 0 12px 40px #0009;
-  --shadow-float-ring: 0 0 0 1px var(--line), 0 12px 40px #0009;
-  --shadow-inset-top: inset 0 1px 0 #ffffff0a;
+  --shadow-float-ring: 0 0 0 1px var(--line), var(--shadow-float);
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
@@ -105,6 +117,65 @@
   --z-popover: 60;
   --z-modal: 70;
   --z-toast: 80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117;
+    --stage: #0a0c11;
+    --panel: #171a22;
+    --raised: #1e222c;
+    --hover: #242936;
+    --field: #12151c;
+    --line: #2a2f3a;
+    --line-strong: #3a4150;
+    --line-soft: #1f232c;
+
+    --ink: #e7e9ee;
+    --ink-2: #c4c8d1;
+    --muted: #9aa0ad;
+    --placeholder: #7f8592;
+    --faint: #6b7180;
+
+    --accent: #ff4f40;
+    --accent-hover: #ff6b5f;
+    --accent-press: #ff3321;
+    --accent-ink: #ff4f40;
+    --on-accent: #190a08;
+    --accent-tint: #ff4f4014;
+    --accent-tint-strong: #ff4f4026;
+    --accent-line: #ff4f4059;
+
+    --focus: #3b82f6;
+    --focus-ring: #3b82f640;
+    --select: #3b82f6;
+    --link: #8ab4ff;
+    --selection: #3b82f659;
+
+    --success: #22c55e;
+    --success-tint: #22c55e14;
+    --success-line: #22c55e4d;
+    --warning: #f5b14c;
+    --warning-tint: #f5b14c14;
+    --warning-line: #f5b14c4d;
+    --error: #ff4f40;
+    --error-ink: #ff7a6e;
+    --error-tint: #ff4f4014;
+    --error-line: #ff4f4059;
+
+    --scrim: #05060acc;
+    --veil: #0a0c1124;
+    --shimmer: #ffffff0d;
+    --dock-bg: #12141bcc;
+    --dock-line: #ffffff1f;
+    --dock-tile-line: #ffffff33;
+    --dock-tile-line-hover: #ffffff80;
+    --tile-shadow: 0 10px 26px #000b;
+    --shadow-small: 0 1px 3px #0008;
+    --shadow-float: 0 12px 40px #0009;
+    --shadow-inset-top: inset 0 1px 0 #ffffff0a;
+    --highlight: #ffffff33;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

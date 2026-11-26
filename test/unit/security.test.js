@@ -7,7 +7,7 @@ import path from 'node:path';
 import WebSocket from 'ws';
 import { startDeckhand } from '../helpers/deckhand.js';
 import { request, postJson } from '../helpers/http.js';
-import { tempDir, makeDeck, makeBin, exists } from '../helpers/util.js';
+import { tempDir, makeDeck } from '../helpers/util.js';
 
 const EVIL = 'https://evil.example';
 
@@ -29,7 +29,7 @@ function wsConnect(port, headers = {}) {
 }
 
 describe('security', () => {
-  let srv, root, deckDir, deckPath, otherDeck, secret, logPath;
+  let srv, root, deckDir, deckPath, otherDeck, secret;
 
   before(async () => {
     root = await tempDir();
@@ -40,11 +40,7 @@ describe('security', () => {
     secret = path.join(root, 'secret.txt');
     await fsp.writeFile(secret, 'top secret');
     await fsp.symlink(secret, path.join(deckDir, 'link.txt'));
-    logPath = path.join(root, 'agent.log');
-    const binDir = await makeBin(path.join(root, 'bin'), {
-      claude: `require('node:fs').appendFileSync(${JSON.stringify(logPath)}, 'ran\\n');`,
-    });
-    srv = await startDeckhand({ args: [deckPath], binDir });
+    srv = await startDeckhand({ args: [deckPath], agents: ['claude'] });
   });
 
   after(async () => { await srv?.stop(); });
@@ -79,23 +75,23 @@ describe('security', () => {
   });
 
   test('AC-58 foreign Origin cannot open a deck or start a run', async () => {
-    const open = await postJson(srv.port, '/api/open', { path: otherDeck }, { Origin: EVIL });
+    const open = await postJson(srv.port, '/api/deck/open', { path: otherDeck }, { Origin: EVIL });
     assert.equal(open.status, 403);
     assert.equal(open.json.error.code, 'forbidden_origin');
-    const run = await postJson(srv.port, '/api/implement', { run: true }, { Origin: EVIL });
+    const run = await postJson(srv.port, '/api/runs', { kind: 'edit', scope: 'all' }, { Origin: EVIL });
     assert.equal(run.status, 403);
-    const note = await postJson(srv.port, '/api/run-note', { note: { text: 'x', aiId: 'dh1' } }, { Origin: 'null' });
-    assert.equal(note.status, 403);
+    const create = await postJson(srv.port, '/api/runs', { kind: 'create', description: 'x' }, { Origin: 'null' });
+    assert.equal(create.status, 403);
     const state = await request(srv.port, { path: '/api/state' });
-    assert.equal(state.json.deck.deckPath, deckPath);
+    assert.equal(state.json.deck.path, deckPath);
     await new Promise((r) => setTimeout(r, 300));
-    assert.equal(exists(logPath), false, 'agent ran');
+    assert.deepEqual(srv.agentLog({ mode: 'run' }), [], 'agent ran');
   });
 
   test('AC-58 cross-site fetch metadata is rejected even without Origin', async () => {
     const res = await request(srv.port, {
       method: 'POST',
-      path: '/api/open',
+      path: '/api/deck/open',
       headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'cross-site' },
       body: JSON.stringify({ path: otherDeck }),
     });
@@ -108,7 +104,7 @@ describe('security', () => {
     for (const type of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', null]) {
       const res = await request(srv.port, {
         method: 'POST',
-        path: '/api/open',
+        path: '/api/deck/open',
         headers: { Origin: `http://127.0.0.1:${srv.port}`, ...(type ? { 'Content-Type': type } : {}) },
         body: JSON.stringify({ path: otherDeck }),
       });
@@ -116,17 +112,17 @@ describe('security', () => {
       assert.equal(res.json.error.code, 'bad_content_type');
     }
     const state = await request(srv.port, { path: '/api/state' });
-    assert.equal(state.json.deck.deckPath, deckPath);
+    assert.equal(state.json.deck.path, deckPath);
   });
 
   test('same-origin JSON mutations still work', async () => {
-    const res = await postJson(srv.port, '/api/implement', {}, { 'Sec-Fetch-Site': 'same-origin' });
+    const res = await postJson(srv.port, '/api/agents/detect', {}, { 'Sec-Fetch-Site': 'same-origin' });
     assert.equal(res.status, 200);
-    assert.equal(typeof res.json.prompt, 'string');
+    assert.equal(res.json.agents.selected, 'claude');
   });
 
   test('JSON bodies over 1 MB get 413', async () => {
-    const res = await postJson(srv.port, '/api/open', { path: 'x'.repeat(1024 * 1024 + 10) });
+    const res = await postJson(srv.port, '/api/deck/open', { path: 'x'.repeat(1024 * 1024 + 10) });
     assert.equal(res.status, 413);
     assert.equal(res.json.error.code, 'too_large');
   });
@@ -134,7 +130,7 @@ describe('security', () => {
   test('bad JSON gets 400 without a stack', async () => {
     const res = await request(srv.port, {
       method: 'POST',
-      path: '/api/open',
+      path: '/api/deck/open',
       headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${srv.port}` },
       body: '{"path": ',
     });
@@ -144,7 +140,7 @@ describe('security', () => {
   });
 
   test('opening a missing deck does not echo the path', async () => {
-    const res = await postJson(srv.port, '/api/open', { path: path.join(root, 'nope.html') });
+    const res = await postJson(srv.port, '/api/deck/open', { path: path.join(root, 'nope.html') });
     assert.equal(res.status, 400);
     assert.ok(res.json.error.code);
     assertNoLeak(res, root);

@@ -5,7 +5,7 @@ function refuse(socket, status, text) {
   socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
 
-export function createHub({ server, guard, snapshot = () => [], onMessage = null, maxPayload = 64 * 1024 * 1024 }) {
+export function createHub({ server, guard, snapshot = () => [], onMessage = null, maxPayload = 16 * 1024 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload });
   const clients = new Set();
 

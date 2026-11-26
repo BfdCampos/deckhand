@@ -6,16 +6,21 @@
   "bin": {
     "deckhand": "server.js"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "demo": "node server.js samples/sample-deck.html",
-    "test": "node --test \"test/unit/**/*.test.js\" && playwright test --project=e2e",
+    "test": "node --test \"test/unit/**/*.test.js\" && playwright test --project=e2e && playwright test --project=perf --workers=1",
     "test:unit": "node --test \"test/unit/**/*.test.js\"",
     "test:e2e": "playwright test --project=e2e",
+    "test:perf": "playwright test --project=perf --workers=1",
     "test:live": "DECKHAND_LIVE=1 playwright test --project=live"
   },
   "dependencies": {
     "chokidar": "^4.0.1",
+    "parse5": "^8.1.1",
     "ws": "^8.18.0"
   },
   "license": "MIT",

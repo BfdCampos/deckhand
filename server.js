@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { loadConfig, PORT_ATTEMPTS } from './src/server/config.js';
 import { createGuard } from './src/server/security.js';
 import { createHttp } from './src/server/http.js';
 import { createHub } from './src/server/hub.js';
 import { createStore } from './src/server/store.js';
-import { listDir } from './src/server/files.js';
+import { tildify } from './src/server/files.js';
+import { homeRoutes } from './src/server/home-routes.js';
+import { openBrowser } from './src/server/open.js';
 import { createDeckSession } from './src/server/deck-session.js';
 import { createNotes } from './src/server/notes.js';
 import { createAssets } from './src/server/assets.js';
-import { createLegacyRuns } from './src/server/legacy-runs.js';
+import { deckRoutes } from './src/server/deck-routes.js';
+import { createSample } from './src/server/sample.js';
+import { createAgents } from './src/server/agents/index.js';
+import { createRuns } from './src/server/runs.js';
 
 let config;
 try {
@@ -24,33 +30,43 @@ const serverId = crypto.randomUUID();
 let hub = null;
 const broadcast = (event) => hub?.broadcast(event);
 
+const hubProxy = { broadcast };
 const store = createStore({ stateDir: config.stateDir });
-const session = createDeckSession({ broadcast, home: config.home });
-const notes = createNotes({ session });
+const notes = createNotes({ hub: hubProxy });
+const session = createDeckSession({ hub: hubProxy, store, notes, home: config.home });
+const sample = createSample({ config, store });
 const assets = createAssets({ session });
-const runs = createLegacyRuns({ session, notes, broadcast, config });
+const agents = createAgents({ config, store, broadcast });
+const runs = createRuns({ config, session, notes, agents, store, broadcast });
 
 let port = null;
 const guard = createGuard({ getPort: () => port });
-const app = createHttp({ config, guard, deckDir: () => session.state.deckDir });
-
-async function openDeck(p) {
-  await session.bind(p);
-}
+const app = createHttp({
+  config,
+  guard,
+  deckDir: () => session.meta()?.dir ?? null,
+  deckSource: (file) => (file === session.meta()?.path ? session.servedSource() : null),
+});
 
 function stateSnapshot() {
-  const deck = session.publicState();
-  return { ...deck, deck: deck.bound ? deck : null, serverId };
+  const meta = session.meta();
+  return {
+    deck: meta,
+    agents: agents.payload(),
+    run: runs.state(),
+    serverId,
+    decksDir: config.decksDir,
+    decksDirLabel: tildify(config.decksDir, config.home),
+    sampleDeck: path.join(config.rootDir, 'samples', 'sample-deck.html'),
+  };
 }
 
 app.registerRoutes({
   'GET /api/state': () => stateSnapshot(),
-  'GET /api/fs': ({ query }) => listDir(query.get('dir') || config.home, { home: config.home }),
-  'POST /api/open': async ({ body }) => {
-    await openDeck(body.path);
-    return session.publicState();
-  },
+  ...deckRoutes({ session, notes, sample }),
+  ...homeRoutes({ store, config }),
   ...assets.routes,
+  ...agents.routes({ isBusy: runs.isBusy }),
   ...runs.routes,
 });
 
@@ -59,21 +75,11 @@ hub = createHub({
   guard,
   snapshot: () => [
     { type: 'hello', serverId, state: stateSnapshot() },
-    { type: 'bound', deck: session.publicState() },
+    { type: 'deck', deck: session.meta() },
+    { type: 'notes', ...notes.snapshot() },
+    { type: 'agents', agents: agents.payload() },
+    ...(runs.state() ? [{ type: 'run', run: runs.state() }] : []),
   ],
-  onMessage: async (msg, ws) => {
-    if (msg.type === 'save-html') {
-      if (session.state.deckPath && typeof msg.html === 'string') session.queueWrite(msg.html);
-    } else if (msg.type === 'save-notes') {
-      await notes.save(msg.payload || {});
-    } else if (msg.type === 'open') {
-      try {
-        await openDeck(msg.path);
-      } catch (e) {
-        hub.send(ws, { type: 'error', error: e.message });
-      }
-    }
-  },
 });
 
 function tryListen(server, p) {
@@ -111,19 +117,24 @@ async function shutdown(code) {
   hub.close();
   app.server.closeAllConnections();
   app.server.close();
-  await session.close().catch(() => {});
+  await session.dispose().catch(() => {});
   process.exit(code);
 }
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
+process.on('unhandledRejection', (e) => {
+  console.error('[deckhand] unhandled error:', e?.stack || e);
+});
 process.on('uncaughtException', (e) => {
   console.error('[deckhand] unexpected error:', e?.stack || e);
   shutdown(1);
 });
 
+let detecting;
 try {
   await store.load();
+  detecting = agents.detect().catch((e) => console.error(`[deckhand] agent detection failed: ${e.message}`));
   port = await listen(app.server, config.port);
 } catch (e) {
   console.error(e.message);
@@ -132,11 +143,16 @@ try {
 
 if (config.deckPath) {
   try {
-    await openDeck(config.deckPath);
+    await session.open(await sample.resolve(config.deckPath));
   } catch (e) {
     console.error(`Couldn't open ${config.deckPath}: ${e.message}`);
   }
 }
 
-const agent = runs.claudePath() ? 'Claude Code' : 'none found';
-console.log(`\n  Deckhand is running at http://127.0.0.1:${port}\n  Agent: ${agent}\n  Press Ctrl+C to stop.\n`);
+await detecting;
+const url = `http://127.0.0.1:${port}`;
+const bound = session.meta();
+const landing = bound ? `${url}/edit?deck=${encodeURIComponent(bound.path)}` : url;
+console.log(`\n  Deckhand is running at ${landing}\n  Agent: ${agents.launchLine()}\n  Press Ctrl+C to stop.\n`);
+
+if (config.open) openBrowser(bound ? landing : `${url}/`);

@@ -52,12 +52,16 @@ export async function validateDeckPath(input, { home }) {
     throw openError(e.code === 'EACCES' || e.code === 'EPERM' ? 'unreadable' : 'not_found');
   }
   if (st.isDirectory()) throw openError('is_dir');
-  if (!DECK_RE.test(abs)) throw openError('not_html');
-  if (!st.isFile()) throw openError('unreadable');
   let real;
-  let buf;
   try {
     real = await fsp.realpath(abs);
+  } catch (e) {
+    throw openError(e.code === 'ENOENT' ? 'not_found' : 'unreadable');
+  }
+  if (!DECK_RE.test(real)) throw openError('not_html');
+  if (!st.isFile()) throw openError('unreadable');
+  let buf;
+  try {
     buf = await fsp.readFile(real);
   } catch (e) {
     throw openError(e.code === 'ENOENT' ? 'not_found' : 'unreadable');

@@ -53,31 +53,34 @@ describe('B1 and m2: open only binds real decks, and a failed open changes nothi
   test('each bad path is refused with the spec code and copy, and the deck stays bound', async () => {
     const cases = [[files.md, 'not_html'], [files.dir, 'is_dir'], [files.empty, 'empty'], [files.locked, 'unreadable'], [path.join(root, 'gone.html'), 'not_found']];
     for (const [p, code] of cases) {
-      const res = await postJson(srv.port, '/api/open', { path: p });
+      const res = await postJson(srv.port, '/api/deck/open', { path: p });
       assert.equal(res.status, 400, p);
       assert.deepEqual(res.json.error, { code, message: COPY[code] }, p);
       const state = await bound();
-      assert.equal(state.deckPath, good, `still bound to the good deck after ${code}`);
+      assert.equal(state.deck.path, good, `still bound to the good deck after ${code}`);
     }
     assert.equal(await fsp.readFile(files.md, 'utf8'), '# My private notes\n');
   });
 
-  test('a socket open of a non-HTML file is refused and nothing is rebound', async () => {
+  test('the socket ignores open requests, so nothing is rebound', async () => {
     const { ws, messages } = await socket(srv.port);
+    await waitFor(() => messages.some((m) => m.type === 'deck'));
     ws.send(JSON.stringify({ type: 'open', path: files.md }));
-    const err = await waitFor(() => messages.find((m) => m.type === 'error'));
-    assert.equal(err.error, COPY.not_html);
-    assert.equal(messages.filter((m) => m.type === 'bound').length, 1, 'only the hello snapshot');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(messages.filter((m) => m.type === 'deck').length, 1, 'only the connect snapshot');
     ws.close();
-    assert.equal((await bound()).deckPath, good);
+    assert.equal((await bound()).deck.path, good);
   });
 
   test('after a failed open, saves still go to the good deck and never to the failed file', async () => {
-    assert.equal((await postJson(srv.port, '/api/open', { path: files.locked })).status, 400);
-    const { ws } = await socket(srv.port);
-    ws.send(JSON.stringify({ type: 'save-html', html: '<h1>saved to good</h1>' }));
-    await waitFor(async () => (await fsp.readFile(good, 'utf8')) === '<h1>saved to good</h1>');
-    ws.close();
+    assert.equal((await postJson(srv.port, '/api/deck/open', { path: files.locked })).status, 400);
+    const { deck } = await bound();
+    const res = await postJson(srv.port, '/api/deck/ops', {
+      deckId: deck.deckId, tabId: 't', baseRev: deck.rev,
+      ops: [{ type: 'insert', parentAiId: null, html: '<p>saved to good</p>' }],
+    });
+    assert.equal(res.status, 200);
+    assert.match(await fsp.readFile(good, 'utf8'), /<p data-ai-id="dh\d+">saved to good<\/p>/);
     await fsp.chmod(files.locked, 0o644);
     assert.equal(await fsp.readFile(files.locked, 'utf8'), '<h1>locked</h1>');
     await fsp.chmod(files.locked, 0o000);
@@ -101,7 +104,7 @@ describe('m3: bad input gets 4xx, not 500, and the log stays quiet', () => {
   after(async () => { await srv?.stop(); });
 
   test('null, array and scalar JSON bodies get 400 bad_json', async () => {
-    for (const route of ['/api/open', '/api/run-note', '/api/implement']) {
+    for (const route of ['/api/deck/open', '/api/runs', '/api/agents/select']) {
       for (const body of ['null', '[]', '42', '"x"']) {
         const res = await request(srv.port, {
           method: 'POST', path: route, body,
@@ -113,10 +116,13 @@ describe('m3: bad input gets 4xx, not 500, and the log stays quiet', () => {
     }
   });
 
-  test('/shared/* without a shared folder gets 404', async () => {
-    for (const p of ['/shared/anything', '/shared/slug.js']) {
+  test('/shared/ serves the shared modules and 404s anything else', async () => {
+    const slug = await request(srv.port, { path: '/shared/slug.js' });
+    assert.equal(slug.status, 200);
+    assert.match(slug.headers['content-type'], /text\/javascript/);
+    for (const p of ['/shared/anything', '/shared/nope.js', '/shared/..%2Fserver%2Fruns.js']) {
       const res = await request(srv.port, { path: p });
-      assert.equal(res.status, 404, p);
+      assert.ok([403, 404].includes(res.status), `${p} got ${res.status}`);
     }
   });
 
@@ -173,7 +179,68 @@ describe('n7: npm start -- ./deck.html resolves against the shell folder', () =>
     const deck = await makeDeck(dir, 'relative.html');
     const srv = await startDeckhand({ args: ['relative.html'], env: { INIT_CWD: dir } });
     try {
-      assert.equal((await request(srv.port, { path: '/api/state' })).json.deckPath, deck);
+      assert.equal((await request(srv.port, { path: '/api/state' })).json.deck.path, deck);
+    } finally {
+      await srv.stop();
+    }
+  });
+});
+
+describe('R2: symlinked decks are judged by their real target', () => {
+  test('a .html link to a non-HTML file is refused and the target is untouched', async () => {
+    const dir = await tempDir();
+    const target = path.join(dir, 'zshrc');
+    await fsp.writeFile(target, 'export SECRET=1\n');
+    await fsp.symlink(target, path.join(dir, 'sneaky.html'));
+    await fsp.mkdir(path.join(dir, 'realdir'));
+    await fsp.symlink(path.join(dir, 'realdir'), path.join(dir, 'dirlink.html'));
+    const good = await makeDeck(dir, 'real.html');
+    await fsp.symlink(good, path.join(dir, 'alias.html'));
+    await fsp.symlink(good, path.join(dir, 'alias-no-ext'));
+    const srv = await startDeckhand({ args: [good] });
+    try {
+      const sneaky = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'sneaky.html') });
+      assert.equal(sneaky.status, 400);
+      assert.equal(sneaky.json.error.code, 'not_html');
+      const dirLink = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'dirlink.html') });
+      assert.equal(dirLink.json.error.code, 'is_dir');
+      assert.equal((await request(srv.port, { path: '/api/state' })).json.deck.path, good);
+      assert.equal(await fsp.readFile(target, 'utf8'), 'export SECRET=1\n');
+      const alias = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'alias.html') });
+      assert.equal(alias.status, 200, 'a .html link to a .html deck still opens');
+      assert.equal(alias.json.path, good);
+      const noExt = await postJson(srv.port, '/api/deck/open', { path: path.join(dir, 'alias-no-ext') });
+      assert.equal(noExt.status, 200, 'the real target decides, not the link name');
+    } finally {
+      await srv.stop();
+    }
+  });
+});
+
+describe('R3: /deckroot hidden segments with every separator and encoding', () => {
+  test('backslashes and encoded separators cannot smuggle hidden or non-web files', async () => {
+    const dir = await tempDir();
+    await fsp.mkdir(path.join(dir, 'sub'));
+    await fsp.mkdir(path.join(dir, 'sub\\.hidden'), { recursive: true }).catch(() => {});
+    await fsp.writeFile(path.join(dir, 'sub', 'ok.png'), 'png');
+    await makeDeck(dir);
+    const srv = await startDeckhand({ args: [path.join(dir, 'deck.html')] });
+    try {
+      const paths = [
+        '/deckroot/sub%5c.hidden%5cx.png',
+        '/deckroot/sub%5C.hidden%5Cx.png',
+        '/deckroot/sub\\.hidden\\x.png',
+        '/deckroot/%2ehidden/x.png',
+        '/deckroot/sub%2f.hidden%2fx.png',
+        '/deckroot/sub/%2Eenv',
+        '/deckroot/.%65nv',
+        '/deckroot/x%5c..%5cdeck.html',
+      ];
+      for (const p of paths) {
+        const res = await request(srv.port, { path: p });
+        assert.equal(res.status, 403, p);
+      }
+      assert.equal((await request(srv.port, { path: '/deckroot/sub/ok.png' })).status, 200);
     } finally {
       await srv.stop();
     }

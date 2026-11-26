@@ -134,6 +134,16 @@ describe('uploads', () => {
     assert.deepEqual(await listAssets(), before);
   });
 
+  test('n11 oversize uploads always get a readable 413, never a reset', async () => {
+    const body = Buffer.concat([PNG, Buffer.alloc(21 * MB - PNG.length)]);
+    for (let i = 0; i < 6; i++) {
+      const withLength = await upload(srv.port, body, { name: 'huge.png' });
+      assert.equal(withLength.status, 413, `with length, try ${i}`);
+      const streamed = await chunkedUpload(srv.port, 21 * MB, 256 * 1024);
+      assert.equal(streamed.status, 413, `streamed, try ${i}`);
+    }
+  });
+
   test('exactly 20 MB is accepted', async () => {
     const body = Buffer.concat([PNG, Buffer.alloc(20 * MB - PNG.length)]);
     const res = await upload(srv.port, body, { name: 'edge.png' });
@@ -157,6 +167,13 @@ describe('uploads', () => {
     assert.deepEqual(outside, []);
     const inDeckDir = (await fsp.readdir(deckDir)).sort();
     assert.deepEqual(inDeckDir, ['deck.html', 'deckhand-assets']);
+  });
+
+  test('uploads in the same millisecond each get their own timestamp, never a -1 suffix', async () => {
+    const results = await Promise.all(Array.from({ length: 20 }, () => upload(srv.port, PNG, { name: 'burst.png' })));
+    const names = results.map((r) => r.json.url);
+    for (const n of names) assert.match(n, /^deckhand-assets\/\d+-burst\.png$/);
+    assert.equal(new Set(names).size, names.length);
   });
 
   test('a missing X-Filename still gets a safe name', async () => {

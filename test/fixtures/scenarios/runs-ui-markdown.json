@@ -1,0 +1,12 @@
+{
+  "description": "Runs UI: the agent replies with light Markdown and an HTML-looking string, then succeeds.",
+  "steps": [
+    { "emit": "init" },
+    { "emit": "read" },
+    { "emit": "edit", "replace": ["(<h1\\b[^>]*>)", "$1Edited: "], "regex": true },
+    { "tick": "all" },
+    { "emit": "text", "text": "**Made the title bigger** and *warmer* on `dh3` (the `h1`).\n\n- First change\n- Second change\n\nLeft <img src=x onerror=alert(1)> as text." },
+    { "emit": "result", "text": "Done." },
+    { "exit": 0 }
+  ]
+}

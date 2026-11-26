@@ -1,0 +1,64 @@
+{
+  "description": "Reads, edits, talks for a moment, then fails with an error and exits 1. The edit is already in the deck.",
+  "edit": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "read",
+      "delay": 150
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true,
+      "delay": 150
+    },
+    {
+      "emit": "text",
+      "text": "Now the second note.",
+      "delay": 300
+    },
+    {
+      "stderr": "Error: the model returned an error"
+    },
+    {
+      "emit": "result",
+      "isError": true,
+      "text": "The agent hit an error halfway through.",
+      "delay": 300
+    },
+    {
+      "exit": 1
+    }
+  ],
+  "create": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking",
+      "delay": 150
+    },
+    {
+      "emit": "text",
+      "text": "Planning the slides.",
+      "delay": 300
+    },
+    {
+      "stderr": "Error: the model returned an error"
+    },
+    {
+      "emit": "result",
+      "isError": true,
+      "text": "The agent hit an error halfway through.",
+      "delay": 300
+    },
+    {
+      "exit": 1
+    }
+  ]
+}

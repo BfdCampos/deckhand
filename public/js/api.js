@@ -1,3 +1,5 @@
+export const tabId = crypto.randomUUID();
+
 export class ApiError extends Error {
   constructor(code, message, status) {
     super(message);
@@ -10,7 +12,7 @@ async function parse(res) {
   let body = null;
   try { body = await res.json(); } catch { }
   const err = body && body.error;
-  if (!res.ok || err) {
+  if (!res.ok) {
     if (err && typeof err === 'object') throw new ApiError(err.code || 'error', err.message || 'Something went wrong.', res.status);
     throw new ApiError('error', typeof err === 'string' ? err : `Request failed (${res.status}).`, res.status);
   }
@@ -38,7 +40,6 @@ export const api = {
 };
 
 const listeners = new Set();
-let socket = null;
 let lastSeq = -1;
 let serverId = null;
 
@@ -58,7 +59,7 @@ function dispatch(msg) {
 
 export function connectEvents({ onStatus } = {}) {
   const open = () => {
-    socket = new WebSocket(`ws://${location.host}/ws`);
+    const socket = new WebSocket(`ws://${location.host}/ws`);
     socket.onopen = () => onStatus && onStatus(true);
     socket.onclose = () => { onStatus && onStatus(false); setTimeout(open, 800); };
     socket.onmessage = (ev) => {
@@ -70,18 +71,10 @@ export function connectEvents({ onStatus } = {}) {
   open();
 }
 
-export function sendLegacy(msg) {
-  if (socket && socket.readyState === 1) socket.send(JSON.stringify(msg));
-}
-
 export function normaliseDeck(d) {
-  if (!d) return null;
-  if (d.bound === false) return null;
-  if (d.bound) return { path: d.deckPath, name: d.base, url: d.deckUrl, dir: d.deckPath.replace(/\/[^/]*$/, '') };
-  return d.path ? d : null;
+  return d && d.path ? d : null;
 }
 
 export function deckFromState(s) {
-  if (!s) return null;
-  return 'deck' in s ? normaliseDeck(s.deck) : normaliseDeck(s);
+  return s ? normaliseDeck(s.deck) : null;
 }

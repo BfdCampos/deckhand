@@ -1,9 +1,15 @@
 import fs from 'node:fs';
 import { test, expect } from './fixtures.js';
+import { editUrl } from './editor-helpers.js';
 
 test.use({
   deckhandOptions: { deck: 'test/fixtures/decks/basic.html' },
-  allowedConsoleErrors: [/deckhand\.json|Content Security Policy|Failed to load resource|Failed to fetch/],
+  allowedConsoleErrors: [[
+    /^Failed to load resource: the server responded with a status of 404/,
+    /violates the following Content Security Policy directive: "connect-src 'none'"/,
+    /^Fetch API cannot load http:\/\/127\.0\.0\.1:\d+\/api\/fs\?dir=\/\. Refused to connect because it violates the document's Content Security Policy\./,
+    /Failed to fetch/,
+  ]],
 });
 
 test('slide scripts never run in dock thumbnails, so they cannot reach the API', async ({ page, deckhand }) => {
@@ -13,7 +19,7 @@ test('slide scripts never run in dock thumbnails, so they cannot reach the API',
   const hits = [];
   page.on('request', (req) => { if (new URL(req.url()).pathname.startsWith('/api/fs')) hits.push(req.frame()?.url() || '?'); });
 
-  await page.goto(deckhand.url);
+  await page.goto(await editUrl(deckhand));
   await expect(page.locator('.dock-thumb')).toHaveCount(3);
   for (const thumb of await page.locator('.dock-thumb').all()) {
     await expect(thumb).toHaveAttribute('sandbox', 'allow-same-origin');

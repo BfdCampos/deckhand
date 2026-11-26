@@ -1,0 +1,140 @@
+{
+  "description": "Edits the deck early, then keeps going for about 3 s with a message every 400 ms, then ticks everything and succeeds. Create writes the deck early and keeps going too.",
+  "edit": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking"
+    },
+    {
+      "emit": "read",
+      "delay": 200
+    },
+    {
+      "emit": "edit",
+      "replace": [
+        "(<h1\\b[^>]*>)",
+        "$1Edited: "
+      ],
+      "regex": true,
+      "delay": 200
+    },
+    {
+      "emit": "text",
+      "text": "Still working (1 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (2 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (3 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (4 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (5 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (6 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (7 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (8 of 8).",
+      "delay": 400
+    },
+    {
+      "tick": "all"
+    },
+    {
+      "emit": "text",
+      "text": "I applied the notes and ticked them off."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ],
+  "create": [
+    {
+      "emit": "init"
+    },
+    {
+      "emit": "thinking"
+    },
+    {
+      "emit": "write",
+      "contentFrom": "two-slide.html",
+      "delay": 200
+    },
+    {
+      "emit": "text",
+      "text": "Still working (1 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (2 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (3 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (4 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (5 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (6 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (7 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "Still working (8 of 8).",
+      "delay": 400
+    },
+    {
+      "emit": "text",
+      "text": "I made a two-slide deck."
+    },
+    {
+      "emit": "result"
+    },
+    {
+      "exit": 0
+    }
+  ]
+}
