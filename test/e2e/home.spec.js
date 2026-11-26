@@ -182,7 +182,7 @@ test('empty recents offer the sample deck', async ({ page, deckhand }) => {
   await openHome(page, deckhand);
   await expect(page.locator('.recents-empty')).toContainText('Decks you open or create will show up here.');
   await page.getByRole('button', { name: 'Try the sample deck' }).click();
-  await expect(topName(page)).toHaveText('sample-deck.html');
+  await expect(topName(page)).toHaveText(/^sample-deck-\d{4}-\d{2}-\d{2}-\d{4}(-\d+)?\.html$/);
 });
 
 test.describe('with no agent', () => {

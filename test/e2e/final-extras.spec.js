@@ -29,7 +29,7 @@ test('Try the sample deck stays available once there are recents', async ({ page
   await openHome(page, deckhand);
   await expect(page.locator('.recent-row')).toHaveCount(1);
   await page.getByRole('button', { name: 'Try the sample deck' }).click();
-  await expect(topName(page)).toHaveText('sample-deck.html');
+  await expect(topName(page)).toHaveText(/^sample-deck-\d{4}-\d{2}-\d{2}-\d{4}(-\d+)?\.html$/);
 });
 
 test('the create card goes quiet after the first note, and after leaving and coming back', async ({ page, deckhand }) => {

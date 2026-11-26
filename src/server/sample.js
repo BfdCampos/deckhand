@@ -7,26 +7,29 @@ async function realOrNull(p) {
   try { return await fsp.realpath(p); } catch { return null; }
 }
 
-export function createSample({ config, store }) {
+const pad = (n) => String(n).padStart(2, '0');
+
+function localStamp(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+export function createSample({ config }) {
   const tracked = path.join(config.rootDir, 'samples', 'sample-deck.html');
+  const now = () => (config.testNow ? new Date(config.testNow) : new Date());
 
   async function copy() {
-    const ours = store.get().sampleCopy;
-    if (ours) {
-      try { if ((await fsp.stat(ours)).isFile()) return ours; } catch {}
-    }
     const original = await fsp.readFile(tracked);
+    const stem = `sample-deck-${localStamp(now())}`;
     try {
       await fsp.mkdir(config.decksDir, { recursive: true });
       for (let n = 1; ; n++) {
-        const p = path.join(config.decksDir, n === 1 ? 'sample-deck.html' : `sample-deck-${n}.html`);
+        const p = path.join(config.decksDir, n === 1 ? `${stem}.html` : `${stem}-${n}.html`);
         try {
           await fsp.writeFile(p, original, { flag: 'wx' });
         } catch (e) {
           if (e.code === 'EEXIST') continue;
           throw e;
         }
-        await store.update({ sampleCopy: p });
         return p;
       }
     } catch (e) {
