@@ -144,7 +144,8 @@ export function mountRuns(ctx) {
     card.setSummary(summary);
     card.setError(run.status === 'failed' ? trimError(run.error || 'The agent stopped without saying why.') : null);
 
-    const quiet = run.kind === 'create' && run.status === 'succeeded' && !run.reverted && store.get().justCreated !== run.id;
+    const inUse = (ctx.notes || []).length > 0;
+    const quiet = run.kind === 'create' && run.status === 'succeeded' && !run.reverted && (inUse || store.get().justCreated !== run.id);
     card.el.classList.toggle('is-quiet', quiet);
     const actions = [];
     if (quiet) { card.setActions(actions); return; }
@@ -212,20 +213,17 @@ export function mountRuns(ctx) {
     return note && (note.status || 'open') !== 'done' ? 'Still open' : null;
   }
 
-  let notesSeen = null;
   function settleCreate() {
     if (!store.get().justCreated) return;
     store.set({ justCreated: null });
     renderCard();
   }
   onEvent((m) => { if (m.type === 'deck-changed' && m.source === 'tab') settleCreate(); });
-  new MutationObserver(() => { if (ctx.root?.hidden) settleCreate(); }).observe(ctx.root || document.body, { attributes: true, attributeFilter: ['hidden'] });
 
   let queued = false;
   ctx.notesChanged = () => {
-    const count = (ctx.notes || []).length;
-    if (notesSeen !== null && count > notesSeen) settleCreate();
-    notesSeen = count;
+    if ((ctx.notes || []).length) settleCreate();
+    if (run?.kind === 'create') renderCard();
     if (queued) return;
     queued = true;
     queueMicrotask(() => {
@@ -249,9 +247,9 @@ export function mountRuns(ctx) {
   function applyRun(given, { activity } = {}) {
     const next = given && revertedIds.has(given.id) ? { ...given, reverted: true, canRevert: false } : given;
     store.set({ run: next || null });
-    if (!next || !isOurs(next)) {
-      busyOther = !!next && next.status === 'running' && !isOurs(next);
-      if (run && next && run.id === next.id) run = null;
+    const ours = !!next && (isOurs(next) || (run?.id === next.id && run.kind === next.kind));
+    if (!ours) {
+      busyOther = !!next && next.status === 'running';
       if (!run) lock(false);
       renderFooter();
       return;
@@ -453,6 +451,7 @@ export function mountRuns(ctx) {
   });
 
   store.subscribe((s, patch) => {
+    if ('justCreated' in patch && !s.justCreated && run?.kind === 'create') renderCard();
     if ('agents' in patch) { renderFooter(); if (ourRunning()) lock(true); }
     if ('deck' in patch && s.deck?.path !== deckPath) {
       deckPath = s.deck?.path || null;
