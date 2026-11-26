@@ -169,6 +169,13 @@ describe('uploads', () => {
     assert.deepEqual(inDeckDir, ['deck.html', 'deckhand-assets']);
   });
 
+  test('uploads in the same millisecond each get their own timestamp, never a -1 suffix', async () => {
+    const results = await Promise.all(Array.from({ length: 20 }, () => upload(srv.port, PNG, { name: 'burst.png' })));
+    const names = results.map((r) => r.json.url);
+    for (const n of names) assert.match(n, /^deckhand-assets\/\d+-burst\.png$/);
+    assert.equal(new Set(names).size, names.length);
+  });
+
   test('a missing X-Filename still gets a safe name', async () => {
     const res = await upload(srv.port, PNG, { name: null });
     assert.equal(res.status, 200);
