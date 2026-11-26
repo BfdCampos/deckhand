@@ -391,26 +391,83 @@ export function createManual(ctx) {
     }
     const img = doc().createElement('img');
     img.setAttribute('src', url);
-    await floatOverSlide(img, currentSlide());
-    if (insertElement(img)) select(img);
+    const slide = currentSlide();
+    if (slide === doc().body || !aiIdOf(slide)) {
+      await floatOverPage(img, slide);
+      if (insertElement(img)) select(img);
+      return;
+    }
+    const prevSlideStyle = slide.getAttribute('style');
+    const needsRelative = win().getComputedStyle(slide).position === 'static';
+    if (needsRelative) slide.style.position = 'relative';
+    await floatOverSlide(img, slide);
+    const html = img.outerHTML;
+    slide.appendChild(img);
+    let slideStyle = slide.getAttribute('style');
+    const removeImage = () => { img.remove(); if (ctx.selected === img) clearSelection(); };
+    saver.apply(() => [
+      ...(needsRelative ? [{ type: 'setStyle', aiId: aiIdOf(slide), tag: slide.tagName.toLowerCase(), props: { position: 'relative' } }] : []),
+      { type: 'insert', parentAiId: aiIdOf(slide), html },
+    ], {
+      rollback: () => { removeImage(); setStyleAttr(slide, prevSlideStyle); },
+      onResult: (results) => {
+        const insert = results[results.length - 1];
+        if (needsRelative) { slideStyle = results[0].style ?? slideStyle; setStyleAttr(slide, slideStyle); }
+        img.setAttribute('data-ai-id', insert.aiId);
+      },
+      undo: () => { removeImage(); setStyleAttr(slide, prevSlideStyle); },
+      redo: () => { setStyleAttr(slide, slideStyle); slide.appendChild(img); },
+    });
+    select(img);
+  }
+
+  function topLayer(slide) {
+    let top = 0;
+    for (const el of slide.querySelectorAll('*')) {
+      const z = parseInt(win().getComputedStyle(el).zIndex, 10);
+      if (Number.isFinite(z)) top = Math.max(top, z);
+    }
+    return Math.min(top + 1, 2147483000);
+  }
+
+  async function measure(img, host) {
+    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; visibility: hidden;');
+    host.appendChild(img);
+    try { await img.decode(); } catch { /* measure whatever loaded */ }
+    const natural = { w: img.naturalWidth || 320, h: img.naturalHeight || 180 };
+    img.remove();
+    return natural;
   }
 
   async function floatOverSlide(img, slide) {
-    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; max-width: 40%; visibility: hidden;');
-    slide.appendChild(img);
-    try { await img.decode(); } catch { /* measure whatever loaded */ }
+    const z = topLayer(slide);
+    const natural = await measure(img, slide);
     const s = slide.getBoundingClientRect();
+    const cw = slide.clientWidth || s.width;
+    const ch = slide.clientHeight || s.height;
+    const width = Math.min(natural.w, cw * 0.4);
+    const height = width * (natural.h / natural.w);
     const view = win().innerHeight;
     const visibleTop = Math.max(s.top, 0);
     const visibleBottom = Math.min(s.bottom, view);
-    const maxWidth = Math.min(img.naturalWidth || 320, s.width * 0.4);
-    img.style.maxWidth = '';
-    img.style.width = `${Math.round(maxWidth)}px`;
+    const centreY = (visibleTop + visibleBottom) / 2 - s.top;
+    const top = Math.max(0, Math.min(ch - height, centreY - height / 2));
+    const left = (cw - width) / 2;
+    const pct = (v, of) => `${Math.round((v / of) * 10000) / 100}%`;
+    img.setAttribute('style', `position: absolute; left: ${pct(left, cw)}; top: ${pct(top, ch)}; width: ${pct(width, cw)}; z-index: ${z};`);
+  }
+
+  async function floatOverPage(img, host) {
+    const natural = await measure(img, host);
+    const view = { w: win().innerWidth, h: win().innerHeight };
+    const width = Math.min(natural.w, view.w * 0.4);
+    img.setAttribute('style', 'position: absolute; left: 0px; top: 0px; visibility: hidden; width: ' + Math.round(width) + 'px;');
+    host.appendChild(img);
     const r = img.getBoundingClientRect();
-    const left = Math.round(s.left + (s.width - r.width) / 2 - r.left);
-    const top = Math.round(Math.max(s.top, visibleTop + (visibleBottom - visibleTop - r.height) / 2) - r.top);
+    const left = Math.round((view.w - r.width) / 2 - r.left);
+    const top = Math.round((view.h - r.height) / 2 - r.top);
     img.remove();
-    img.setAttribute('style', `position: absolute; left: ${left}px; top: ${top}px; width: ${Math.round(r.width)}px; max-width: 40%;`);
+    img.setAttribute('style', `position: absolute; left: ${left}px; top: ${top}px; width: ${Math.round(r.width)}px; z-index: ${topLayer(host)};`);
   }
 
   function deleteSelected() {
