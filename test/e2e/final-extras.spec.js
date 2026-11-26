@@ -39,8 +39,11 @@ test('the create card goes quiet after the first note, and after leaving and com
   await expect(topName(page)).toBeVisible({ timeout: 10_000 });
   await expect(card(page).getByRole('button', { name: 'Delete this deck' })).toBeVisible();
 
-  const { deck } = await getApi(deckhand, '/api/state');
-  await postApi(deckhand, '/api/notes', { deckId: deck.deckId, op: 'add', note: { text: 'Bigger title', targetTag: 'h1', slide: 1 } });
+  await page.frameLocator('iframe#deck').locator('h1').click({ button: 'right' });
+  const pop = page.locator('.note-pop');
+  await pop.locator('textarea').fill('Bigger title');
+  await pop.locator('textarea').press('ControlOrMeta+Enter');
+  await expect(page.locator('.note-item')).toHaveCount(1);
   await expect(card(page).getByRole('button', { name: 'Delete this deck' })).toHaveCount(0);
   await expect(card(page).locator('.activity-summary')).toHaveText('Deck created.');
 
